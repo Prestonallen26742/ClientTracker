@@ -914,6 +914,7 @@ function editPanel(c){
     ${c.calls.length?`<h4>Calls</h4><div class="edit-dates">${c.calls.map((k,i)=>`<div><label for="eK_${esc(k.id)}">${esc(callLabel(i))} · ${k.doneAt?"called on":"due"}</label><input id="eK_${esc(k.id)}" type="date" data-kd="${esc(k.id)}" value="${esc(k.doneAt||k.due)}"></div>`).join("")}</div>`:""}
     ${openLabs(c)?`<h4>Bloodwork</h4><div class="edit-dates"><div><label for="eLabs">6-week labs · due</label><input id="eLabs" type="date" value="${esc(openLabs(c).due)}"></div></div>`:""}
     ${c.calls.some(k=>k.doneAt)?`<div><button type="button" class="small" data-act="undo" data-c="${esc(c.id)}">Mark last call as not called</button></div>`:""}
+    ${pendingItems(c).some(it=>it.runOutCalled)?`<div><button type="button" class="small" data-act="runUndo" data-c="${esc(c.id)}">Bring back the "Running out" alert</button></div>`:""}
     <p class="err" id="editErr" hidden></p>
     <div class="actions"><button type="button" class="small primary" data-act="saveEdit" data-c="${esc(c.id)}">Save changes</button><button type="button" class="small ghost" data-act="cancelEdit">Cancel</button></div>
     <div class="danger-row"><span class="hint" style="margin:0">Added by mistake?</span><button type="button" class="small danger" data-act="del" data-c="${esc(c.id)}">Delete ${esc(c.name)}</button></div>
@@ -1120,6 +1121,7 @@ $("list").addEventListener("click",async e=>{
   }
   else if(a==="cancelEdit"){ editing=null; render(); }
   else if(a==="saveEdit" && c){ saveEdit(c); }
+  else if(a==="runUndo" && c){ const its=pendingItems(c).filter(it=>it.runOutCalled); its.forEach(it=>delete it.runOutCalled); save(); render(); toast(`The run-out alert is back for ${c.name}.`); }
   else if(a==="undo" && c){
     let li=-1; c.calls.forEach((k,i)=>{ if(k.doneAt) li=i; });
     if(li<0) return;

@@ -235,7 +235,7 @@ details.notes[open] summary::before{content:"\25BE  "}
           <label>What they're on</label>
           <div class="item-list" id="fItems"></div>
           <button type="button" class="small add-item" id="fAddItem" style="margin-top:8px">+ Add another product</button>
-          <p class="hint">Each product gets its own reorder date, 7 days before it runs out. Tick Recurring for each one they're staying on.</p>
+          <p class="hint">Reorders run on a set schedule from delivery: 28-day supply at day 21, 56-day at day 49, 60-day at day 52, then every supply length. Tick Recurring for each one they're staying on.</p>
         </div>
         <div>
           <div class="row2">
@@ -331,7 +331,7 @@ details.notes[open] summary::before{content:"\25BE  "}
              billedThrough, charges:[], convertedAt, notConverted:{reason,detail,at} }
    ===================================================================== */
 const PROTO={peptides:"Peptides",hrt:"HRT",trt:"TRT",mwl:"MWL"};
-const REPEAT=21, LEAD=7, LABS_DAYS=42;   // HRT/TRT follow-up bloodwork 6 weeks after the paid date            // calls every 21 days after the 2nd; reorder 7 days before a product runs out
+const REPEAT=21, LEAD=7, LABS_DAYS=42;   // calls every 21 days after the 2nd · reorders within 7 days are combined · bloodwork 6 weeks after paid
 const $=id=>document.getElementById(id);
 const noteDrafts={}, openNotes=new Set();
 let clients=[], settings={repeat:REPEAT}, tab="due", search="", show="recurring", editing=null;
@@ -378,21 +378,37 @@ function pendingItems(c){ return itemsOf(c).filter(it=>!it.recurring && !it.notC
 function protocolsOf(c){ return [...new Set(itemsOf(c).map(it=>it.protocol))]; }
 function chipsFor(c){ return protocolsOf(c).map(chip).join(""); }
 function chip(p){ return `<span class="chip ${esc(p)}">${esc(PROTO[p]||p)}</span>`; }
-function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,365)||defaultSupply(o.protocol,o.product), recurring:!!o.recurring, reorders:[], charges:[]}; }
+function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,365)||defaultSupply(o.protocol,o.product), recurring:!!o.recurring, reorders:[], charges:[], roV:1}; }
 
 /* ---------- reorders: 7 days before each product runs out ---------- */
 function openReorder(it){ return (it.reorders||[]).find(r=>!r.doneAt)||null; }
 function lastOrdered(it){ const d=(it.reorders||[]).filter(r=>r.doneAt).map(r=>r.doneAt).sort(); return d[d.length-1]||""; }
-function firstReorderDate(c,it){
-  // after an order: the next one is one supply later; otherwise 7 days before the first supply runs out
-  const lo=lastOrdered(it);
-  if(lo) return addDays(lo,it.supply);
-  return maxDate(addDays(c.delivered,Math.max(it.supply-LEAD,0)), today());
+// Reorders run on a fixed schedule from the first delivery (or the day a product was added later):
+// 28-day supply -> day 21, then every 28 days · 56-day -> day 49, then every 56 · 60-day -> day 52, then every 60.
+// Clicking "Mark ordered" early or late never moves the dates after it.
+function reorderOffset(supply){ return supply===60?52 : supply===56?49 : supply===28?21 : Math.max(supply-7,0); }
+function roAnchor(c,it){ return maxDate(it.startedAt||c.delivered, c.delivered); }
+function slotDate(c,it,k){ return addDays(roAnchor(c,it), reorderOffset(it.supply)+k*it.supply); }
+function nearestSlot(c,it,date){ return Math.max(0, Math.round(diff(date, slotDate(c,it,0))/it.supply)); }
+function nextSlot(c,it){
+  const done=(it.reorders||[]).filter(r=>r.doneAt && Number.isInteger(r.slot)).map(r=>r.slot);
+  if(done.length) return Math.max(...done)+1;
+  if(it.startedAt || !it.convertedAt) return 0;               // started on this schedule: first slot
+  let k=0; while(slotDate(c,it,k)<today() && k<500) k++;      // joined later (converted): next slot from today
+  return k;
 }
 function ensureReorder(c,it,due){
   if(!c.active || !it.recurring || !isDate(c.delivered) || openReorder(it)) return null;
   if(!Array.isArray(it.reorders)) it.reorders=[];
-  const r={id:uid(), due:due||firstReorderDate(c,it), doneAt:null}; it.reorders.push(r); return r;
+  let r;
+  if(due){ r={id:uid(), due, doneAt:null, slot:nearestSlot(c,it,due)}; }  // e.g. "order their next round now"
+  else { const k=nextSlot(c,it); r={id:uid(), due:slotDate(c,it,k), doneAt:null, slot:k}; }
+  it.reorders.push(r); return r;
+}
+// existing reorders get a place on the fixed schedule (once)
+function slotify(c,it){
+  if(it.roV || !isDate(c.delivered)) return; it.roV=1;
+  (it.reorders||[]).sort((a,b)=>a.due.localeCompare(b.due)).forEach((r,i,arr)=>{ const prev=arr[i-1]; r.slot=Math.max(nearestSlot(c,it,r.due), prev?prev.slot+1:0); });
 }
 // reorders that land within 7 days of each other are placed as one order (on the earliest date)
 function reorderGroups(c){
@@ -483,6 +499,7 @@ function migrate(c){
   if(!Array.isArray(c.calls)) c.calls=[];
   if(!Array.isArray(c.notes)) c.notes=[];
   if(!("delivered" in c)) c.delivered = c.calls.length ? c.start : null;
+  itemsOf(c).forEach(it=>slotify(c,it));
   if(c.v===2){ if(!c.labsV){ c.labsV=2; ensureLabs(c,true); } else if(c.labsV===1){ c.labsV=2; labsFromPaid(c); } return; }
   // one protocol per client -> a list of products
   const p=c.protocol in PROTO ? c.protocol : "peptides";
@@ -499,6 +516,7 @@ function migrate(c){
   c.items=[it];
   for(const k of ["protocol","recurring","reorders","charges","convertedAt","notConverted","billedThrough","billV","rep21"]) delete c[k];
   c.v=2;
+  slotify(c,it);
   if(it.recurring) ensureReorder(c,it);
   c.labsV=2; ensureLabs(c,true);
 }
@@ -598,7 +616,7 @@ function render(){
     if(!upAll.length) h=empty("Nothing scheduled","Calls appear here once a client's product is delivered.");
     else { let last=""; for(const y of upAll){ if(y.c){ if(y.d!==last){ const n=diff(y.d,t); h+=`<div class="group-h">${esc(fmt(y.d))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=y.d; } h+=labsCard(y.c,t); continue; } const x=y.x; if(x.k.due!==last){ const n=diff(x.k.due,t); h+=`<div class="group-h">${esc(fmt(x.k.due))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=x.k.due; } h+=callCard(x,t); } }
   } else if(tab==="order"){
-    if(!roNow.length && !roSoon.length) h=empty("Nothing to order in the next 2 weeks","Each product shows up here 7 days before it runs out.");
+    if(!roNow.length && !roSoon.length) h=empty("Nothing to order in the next 2 weeks","Reorders show up here on each product's schedule: day 21 for 28-day supplies, day 49 for 56-day, day 52 for 60-day, and so on.");
     else {
       h+=`<div class="group-h">Order now · ${roNow.length}</div>`+(roNow.length?roNow.map(g=>reorderCard(g,t)).join(""):`<p class="hint">Nothing needs ordering today.</p>`);
       if(roSoon.length) h+=`<div class="group-h">Next 2 weeks · ${roSoon.length}</div>`+roSoon.map(g=>reorderCard(g,t)).join("");
@@ -896,7 +914,7 @@ function saveEdit(c){
     if(wasRec && !it.recurring){ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }
     const r=openReorder(it);
     if(r && x.reorder && x.reorder!==x.reorderOrig) r.due=x.reorder;
-    else if(r && oldSupply!==it.supply && isDate(c.delivered)) r.due=firstReorderDate(c,it);
+    else if(r && oldSupply!==it.supply && isDate(c.delivered)){ const k=Number.isInteger(r.slot)?r.slot:nextSlot(c,it); r.slot=k; r.due=slotDate(c,it,k); }
   }
   // bloodwork: a typed date wins; a newly added HRT/TRT product gets its 6-week labs
   if(labIn && openLabs(c) && labIn.value!==labIn.defaultValue) openLabs(c).due=labIn.value;
@@ -948,7 +966,7 @@ function updatePreview(){
   const lines=ri.items.map(x=>{
     const nm=x.product||PROTO[x.protocol];
     if(!x.recurring) return `<div><b>${esc(nm)}</b> · one-time (asked after the 2nd call)</div>`;
-    const ro=isDate(del)?`reorder ${esc(fmtS(maxDate(addDays(del,Math.max(x.supply-LEAD,0)),today())))}`:`reorder ${Math.max(x.supply-LEAD,0)} days after delivery`;
+    const ro=isDate(del)?`reorder ${esc(fmtS(addDays(del,reorderOffset(x.supply))))}`:`reorder ${reorderOffset(x.supply)} days after delivery`;
     return `<div><b>${esc(nm)}</b> · ${ro}, then every ${x.supply} days · invoice ${billMonths(x.protocol)===2?"every 2 months":"monthly"} on the ${day}</div>`;
   }).join("");
   $("preview").innerHTML=`${isDate(del)?"":`<div><b>Waiting on delivery</b> · shows at the top of Due today</div>`}

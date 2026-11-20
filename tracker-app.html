@@ -183,6 +183,8 @@ details.notes[open] summary::before{content:"\25BE  "}
 .item-row select,.item-row input[type=text],.item-row input:not([type]),.item-row input[type=number],.item-row input[type=date]{padding:7px 8px;font-size:14px}
 .item-row .mini{display:flex;align-items:center;gap:4px;margin:0;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--muted);font-weight:500;white-space:nowrap}
 .item-row .mini input[type=number]{width:58px}
+.item-row .mini select[data-f=supply]{width:100%;min-width:0;padding-left:8px;padding-right:18px;font-size:13px}
+.item-row .mini.sup{min-width:0}
 .item-row .mini input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
 .item-row .reo{grid-column:2/-1}
 .item-row .reo input{width:auto}
@@ -203,6 +205,11 @@ details.notes[open] summary::before{content:"\25BE  "}
 .chips{display:inline-flex;gap:4px;flex-wrap:wrap}
 .labs-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px;padding:7px 10px;font-size:14px}
 .labs-line b{color:var(--accent)}
+.pay-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:7px 10px;font-size:14px}
+.pay-line b{color:var(--warn)}
+.pay-line.late{background:var(--late-soft);border-color:var(--late)}
+.pay-line.late b{color:var(--late)}
+.chip.soon{background:var(--warn-soft);color:var(--warn)}
 </style>
 </head>
 <body>
@@ -235,7 +242,7 @@ details.notes[open] summary::before{content:"\25BE  "}
           <label>What they're on</label>
           <div class="item-list" id="fItems"></div>
           <button type="button" class="small add-item" id="fAddItem" style="margin-top:8px">+ Add another product</button>
-          <p class="hint">Reorders run on a set schedule from delivery: 28-day supply at day 21, 56-day at day 49, 60-day at day 52, then every supply length. Tick Recurring for each one they're staying on.</p>
+          <p class="hint">Order and invoice on the paid day: Peptides and MWL monthly, HRT and TRT every 2 months. Tick Recurring for each one they're staying on.</p>
         </div>
         <div>
           <div class="row2">
@@ -311,7 +318,7 @@ details.notes[open] summary::before{content:"\25BE  "}
         <select id="cvProto"><option value="peptides">Peptides</option><option value="hrt">HRT</option><option value="trt">TRT</option><option value="mwl">MWL</option></select></div>
       <div><label for="cvProd">Product</label><input id="cvProd" maxlength="60" list="dl-peptides"></div>
     </div>
-    <div><label for="cvSupply">Supply lasts · days</label><input id="cvSupply" type="number" min="1" max="365" inputmode="numeric" style="max-width:110px"></div>
+    <div><label for="cvSupply">Order + invoice every</label><select id="cvSupply" style="max-width:140px"><option value="1">month</option><option value="2">2 months</option><option value="3">3 months</option><option value="4">4 months</option><option value="6">6 months</option></select></div>
     <p class="hint" id="cvSwitch" style="margin:0"></p>
     <div><label for="cvWhat">What did they do?</label>
       <textarea id="cvWhat" maxlength="500" rows="2" placeholder="e.g. Continuing KLOW monthly, or switched to Tirzepatide 2.5mg"></textarea></div>
@@ -331,7 +338,8 @@ details.notes[open] summary::before{content:"\25BE  "}
              billedThrough, charges:[], convertedAt, notConverted:{reason,detail,at} }
    ===================================================================== */
 const PROTO={peptides:"Peptides",hrt:"HRT",trt:"TRT",mwl:"MWL"};
-const REPEAT=21, LEAD=7, LABS_DAYS=42;   // calls every 21 days after the 2nd · reorders within 7 days are combined · bloodwork 6 weeks after paid
+const REPEAT=21, LEAD=3, LABS_DAYS=42, HEADS_UP=3;   // heads-up 3 days before each invoice / one-time run-out
+   // calls every 21 days after the 2nd · reorders within 3 days are combined · bloodwork 6 weeks after paid
 const $=id=>document.getElementById(id);
 const noteDrafts={}, openNotes=new Set();
 let clients=[], settings={repeat:REPEAT}, tab="due", search="", show="recurring", editing=null;
@@ -363,12 +371,10 @@ function listJoin(a){ return a.length<=1?(a[0]||""):a.slice(0,-1).join(", ")+" a
 const find=id=>clients.find(c=>c.id===id);
 
 /* ---------- products ---------- */
-function defaultSupply(protocol,product){
-  const p=String(product||"").toLowerCase();
-  if(/progesterone|enclomiphene|enclomophine/.test(p)) return 60;
-  if(/estradiol|estrogen|testosterone|\btest\b|hcg|anastrozole|dhea/.test(p)) return 56;
-  return (protocol==="hrt"||protocol==="trt") ? 56 : 28;
-}
+// how often a product is reordered, counted from the paid date: Peptides/MWL every 30 days, HRT/TRT every 60
+// item.supply = months between reorders/invoices (Peptides/MWL 1, HRT/TRT 2)
+function defaultSupply(protocol){ return (protocol==="hrt"||protocol==="trt") ? 2 : 1; }
+function everyText(n){ n=Number(n)||1; return n===1?"monthly":`every ${n} months`; }
 function itemsOf(c){ if(!Array.isArray(c.items)) c.items=[]; return c.items; }
 function itemName(it){ return it.product ? it.product : PROTO[it.protocol]; }
 function itemLabel(it){ return it.product ? `${it.product} (${PROTO[it.protocol]})` : PROTO[it.protocol]; }
@@ -378,39 +384,46 @@ function pendingItems(c){ return itemsOf(c).filter(it=>!it.recurring && !it.notC
 function protocolsOf(c){ return [...new Set(itemsOf(c).map(it=>it.protocol))]; }
 function chipsFor(c){ return protocolsOf(c).map(chip).join(""); }
 function chip(p){ return `<span class="chip ${esc(p)}">${esc(PROTO[p]||p)}</span>`; }
-function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,365)||defaultSupply(o.protocol,o.product), recurring:!!o.recurring, reorders:[], charges:[], roV:1}; }
+function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,12)||defaultSupply(o.protocol), recurring:!!o.recurring, reorders:[], charges:[], roV:4, runV:1}; }
 
-/* ---------- reorders: 7 days before each product runs out ---------- */
+/* ---------- reorders: on the paid day, same as the invoice ---------- */
 function openReorder(it){ return (it.reorders||[]).find(r=>!r.doneAt)||null; }
 function lastOrdered(it){ const d=(it.reorders||[]).filter(r=>r.doneAt).map(r=>r.doneAt).sort(); return d[d.length-1]||""; }
-// Reorders run on a fixed schedule from the first delivery (or the day a product was added later):
-// 28-day supply -> day 21, then every 28 days · 56-day -> day 49, then every 56 · 60-day -> day 52, then every 60.
-// Clicking "Mark ordered" early or late never moves the dates after it.
-function reorderOffset(supply){ return supply===60?52 : supply===56?49 : supply===28?21 : Math.max(supply-7,0); }
-function roAnchor(c,it){ return maxDate(it.startedAt||c.delivered, c.delivered); }
-function slotDate(c,it,k){ return addDays(roAnchor(c,it), reorderOffset(it.supply)+k*it.supply); }
-function nearestSlot(c,it,date){ return Math.max(0, Math.round(diff(date, slotDate(c,it,0))/it.supply)); }
+// Reorders happen on the paid day of the month, the same day the invoice charges:
+// Peptides/MWL every month, HRT/TRT every 2 months. Clicking "Mark ordered" early or late never moves the dates after it.
+function roAnchor(c,it){ return c.start; }
+function slotDate(c,it,k){ const a=roAnchor(c,it); return addMonthsAnchor(a, (k+1)*(it.supply||1), Number(a.slice(8))); }
+function nearestSlot(c,it,date){ let k=0; while(k<1000 && Math.abs(diff(date,slotDate(c,it,k+1)))<Math.abs(diff(date,slotDate(c,it,k)))) k++; return k; }
+function firstSlotFrom(c,it,date){ let k=0; while(slotDate(c,it,k)<date && k<1000) k++; return k; }
 function nextSlot(c,it){
   const done=(it.reorders||[]).filter(r=>r.doneAt && Number.isInteger(r.slot)).map(r=>r.slot);
   if(done.length) return Math.max(...done)+1;
-  if(it.startedAt || !it.convertedAt) return 0;               // started on this schedule: first slot
-  let k=0; while(slotDate(c,it,k)<today() && k<500) k++;      // joined later (converted): next slot from today
-  return k;
+  if(it.convertedAt && !it.startedAt) return firstSlotFrom(c,it,today());  // went recurring later: next date from today
+  if(it.startedAt && it.startedAt>c.start) return firstSlotFrom(c,it,addDays(it.startedAt,1));  // added later: next paid day after that
+  return 0;
 }
 function ensureReorder(c,it,due){
-  if(!c.active || !it.recurring || !isDate(c.delivered) || openReorder(it)) return null;
+  if(!c.active || !it.recurring || openReorder(it)) return null;
   if(!Array.isArray(it.reorders)) it.reorders=[];
   let r;
   if(due){ r={id:uid(), due, doneAt:null, slot:nearestSlot(c,it,due)}; }  // e.g. "order their next round now"
   else { const k=nextSlot(c,it); r={id:uid(), due:slotDate(c,it,k), doneAt:null, slot:k}; }
   it.reorders.push(r); return r;
 }
-// existing reorders get a place on the fixed schedule (once)
+// existing products move onto the paid-day schedule (once): monthly / every 2 months, next date from today
 function slotify(c,it){
-  if(it.roV || !isDate(c.delivered)) return; it.roV=1;
-  (it.reorders||[]).sort((a,b)=>a.due.localeCompare(b.due)).forEach((r,i,arr)=>{ const prev=arr[i-1]; r.slot=Math.max(nearestSlot(c,it,r.due), prev?prev.slot+1:0); });
+  if(it.roV===4) return; it.roV=4;
+  it.supply=defaultSupply(it.protocol);
+  const done=(it.reorders||[]).filter(r=>r.doneAt).sort((a,b)=>a.doneAt.localeCompare(b.doneAt));
+  done.forEach((r,i)=>{ r.slot=Math.max(nearestSlot(c,it,r.due), i?done[i-1].slot+1:0); });
+  it.reorders=done;
+  if(it.recurring && c.active){
+    const from=done.length ? maxDate(today(), addDays(done[done.length-1].doneAt,1)) : today();
+    let k=firstSlotFrom(c,it,from); if(done.length) k=Math.max(k, done[done.length-1].slot+1);
+    it.reorders.push({id:uid(), due:slotDate(c,it,k), doneAt:null, slot:k});
+  }
 }
-// reorders that land within 7 days of each other are placed as one order (on the earliest date)
+// reorders that land within 3 days of each other are placed as one order (on the earliest date)
 function reorderGroups(c){
   if(!c.active) return [];
   const open=recurringItems(c).map(it=>({it,r:openReorder(it)})).filter(x=>x.r).sort((a,b)=>a.r.due.localeCompare(b.r.due));
@@ -429,7 +442,7 @@ function markOrdered(c,group){
 function billMonths(p){ return (p==="hrt"||p==="trt") ? 2 : 1; }
 function nextInvoice(c,it){
   if(!c.active || !it.recurring || !isDate(c.start)) return "";
-  const day=Number(c.start.slice(8)), m=billMonths(it.protocol), after=isDate(it.billedThrough)?it.billedThrough:c.start;
+  const day=Number(c.start.slice(8)), m=it.supply||billMonths(it.protocol), after=isDate(it.billedThrough)?it.billedThrough:c.start;
   let k=1, d=addMonthsAnchor(c.start,m,day);
   while(d<=after && k<1200){ k++; d=addMonthsAnchor(c.start,m*k,day); }
   return d;
@@ -442,6 +455,22 @@ function invoiceGroups(c){
 }
 function nextInvoiceGroup(c){ return invoiceGroups(c)[0]||null; }
 function payDay(c){ return ordinal(Number(c.start.slice(8))); }
+
+/* ---------- heads-up: 3 days before each invoice (recurring) or the day a one-time product runs out ---------- */
+// one-time: the day they'd be charged if they were recurring (paid day + 1 month, or 2 for HRT/TRT). Only once per product.
+function runOutDate(c,it){ const m=it.supply||defaultSupply(it.protocol), day=Number(c.start.slice(8)), from=maxDate(it.startedAt||c.start,c.start); let k=1, d=addMonthsAnchor(c.start,m,day); while(d<=from && k<1200){ k++; d=addMonthsAnchor(c.start,m*k,day); } return d; }
+function runOutItems(c){ return pendingItems(c).filter(it=>!it.runOutCalled); }
+// existing one-time products whose run-out date already passed don't start out overdue
+function runOutInit(c,it){ if(it.runV) return; it.runV=1; if(!it.recurring && isDate(c.start) && runOutDate(c,it)<today()) it.runOutCalled="before"; }
+function payAlert(c,byDate){
+  if(!c.active || !isDate(c.start)) return null;
+  const g=nextInvoiceGroup(c);
+  if(g && diff(g.date,byDate)<=HEADS_UP) return {kind:"invoice", date:g.date, names:g.items.map(itemName)};
+  const ro=runOutItems(c).map(it=>({it,d:runOutDate(c,it)})).sort((a,b)=>a.d.localeCompare(b.d));
+  if(ro.length && diff(ro[0].d,byDate)<=HEADS_UP){ const its=ro.filter(x=>diff(x.d,ro[0].d)<=LEAD).map(x=>x.it); return {kind:"runout", date:ro[0].d, items:its, names:its.map(itemName)}; }
+  return null;
+}
+function whenText(date,t){ const n=diff(date,t); return n>0?`in ${n} day${n===1?"":"s"} · ${fmtS(date)}`:n===0?"today":`${-n} day${n===-1?"":"s"} overdue`; }
 
 /* ---------- bloodwork: HRT/TRT follow-up labs 6 weeks after the paid date ---------- */
 function hormoneItems(c){ return itemsOf(c).filter(it=>(it.protocol==="hrt"||it.protocol==="trt") && !it.notConverted); }
@@ -499,11 +528,11 @@ function migrate(c){
   if(!Array.isArray(c.calls)) c.calls=[];
   if(!Array.isArray(c.notes)) c.notes=[];
   if(!("delivered" in c)) c.delivered = c.calls.length ? c.start : null;
-  itemsOf(c).forEach(it=>slotify(c,it));
+  itemsOf(c).forEach(it=>{ slotify(c,it); runOutInit(c,it); });
   if(c.v===2){ if(!c.labsV){ c.labsV=2; ensureLabs(c,true); } else if(c.labsV===1){ c.labsV=2; labsFromPaid(c); } return; }
   // one protocol per client -> a list of products
   const p=c.protocol in PROTO ? c.protocol : "peptides";
-  const it={id:uid(), protocol:p, product:"", supply:defaultSupply(p,""), recurring:!!c.recurring,
+  const it={id:uid(), protocol:p, product:"", supply:defaultSupply(p), recurring:!!c.recurring,
     reorders:(c.reorders||[]).map(r=>({id:r.id||uid(), due:r.due, doneAt:r.doneAt||null})), charges:Array.isArray(c.charges)?c.charges:[]};
   if(c.convertedAt) it.convertedAt=c.convertedAt;
   if(c.notConverted) it.notConverted=c.notConverted;
@@ -516,7 +545,7 @@ function migrate(c){
   c.items=[it];
   for(const k of ["protocol","recurring","reorders","charges","convertedAt","notConverted","billedThrough","billV","rep21"]) delete c[k];
   c.v=2;
-  slotify(c,it);
+  slotify(c,it); runOutInit(c,it);
   if(it.recurring) ensureReorder(c,it);
   c.labsV=2; ensureLabs(c,true);
 }
@@ -600,23 +629,24 @@ function render(){
   const hasCallCard=new Set([...due,...up].map(x=>x.c.id)), dueIds=new Set(due.map(x=>x.c.id));
   const labsSolo=clients.filter(c=>{ const l=openLabs(c); return l && !dueIds.has(c.id) && (l.due<=t || !hasCallCard.has(c.id)); }).sort((a,b)=>openLabs(a).due.localeCompare(openLabs(b).due));
   const labsSoloNow=labsSolo.filter(c=>openLabs(c).due<=t), labsSoloLater=labsSolo.filter(c=>openLabs(c).due>t && !hasCallCard.has(c.id));
+  const paySolo=clients.filter(c=>!dueIds.has(c.id) && payAlert(c,t)).sort((a,b)=>payAlert(a,t).date.localeCompare(payAlert(b,t).date));
   const soonEnd=addDays(t,14);
   const ro=allReorderGroups(), roNow=ro.filter(g=>g.due<=t), roSoon=ro.filter(g=>g.due>t && g.due<=soonEnd);
   const inv=allInvoiceGroups(), invNow=inv.filter(g=>g.date<=t), invSoon=inv.filter(g=>g.date>t && g.date<=soonEnd);
-  $("nDue").textContent=due.length+decide.length+waitingList.length+labsSoloNow.length; $("nUp").textContent=up.length+labsSoloLater.length;
+  $("nDue").textContent=due.length+decide.length+waitingList.length+labsSoloNow.length+paySolo.length; $("nUp").textContent=up.length+labsSoloLater.length;
   $("nOrder").textContent=roNow.length; $("nInv").textContent=invNow.length;
   $("nClients").textContent=clients.filter(c=>c.active).length;
   $("toolbar").hidden = tab!=="clients";
   let h="";
   if(tab==="due"){
-    h = (due.length||decide.length||waitingList.length||labsSoloNow.length) ? waitingList.map(c=>waitCard(c,t)).join("")+decide.map(c=>decideCard(c,t)).join("")+labsSoloNow.map(c=>labsCard(c,t)).join("")+due.map(x=>callCard(x,t)).join("")
+    h = (due.length||decide.length||waitingList.length||labsSoloNow.length||paySolo.length) ? waitingList.map(c=>waitCard(c,t)).join("")+decide.map(c=>decideCard(c,t)).join("")+labsSoloNow.map(c=>labsCard(c,t)).join("")+paySolo.map(c=>payCard(c,t)).join("")+due.map(x=>callCard(x,t)).join("")
       : empty(clients.length?"No calls due today":"No clients yet", clients.length?"Check Upcoming to see who's next.":"Add a client on the left and their calls will show up here.");
   } else if(tab==="upcoming"){
     const upAll=[...up.map(x=>({d:x.k.due,x})),...labsSoloLater.map(c=>({d:openLabs(c).due,c}))].sort((a,b)=>a.d.localeCompare(b.d));
     if(!upAll.length) h=empty("Nothing scheduled","Calls appear here once a client's product is delivered.");
     else { let last=""; for(const y of upAll){ if(y.c){ if(y.d!==last){ const n=diff(y.d,t); h+=`<div class="group-h">${esc(fmt(y.d))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=y.d; } h+=labsCard(y.c,t); continue; } const x=y.x; if(x.k.due!==last){ const n=diff(x.k.due,t); h+=`<div class="group-h">${esc(fmt(x.k.due))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=x.k.due; } h+=callCard(x,t); } }
   } else if(tab==="order"){
-    if(!roNow.length && !roSoon.length) h=empty("Nothing to order in the next 2 weeks","Reorders show up here on each product's schedule: day 21 for 28-day supplies, day 49 for 56-day, day 52 for 60-day, and so on.");
+    if(!roNow.length && !roSoon.length) h=empty("Nothing to order in the next 2 weeks","Reorders are on the paid day, same as the invoice: Peptides and MWL monthly, HRT and TRT every 2 months.");
     else {
       h+=`<div class="group-h">Order now · ${roNow.length}</div>`+(roNow.length?roNow.map(g=>reorderCard(g,t)).join(""):`<p class="hint">Nothing needs ordering today.</p>`);
       if(roSoon.length) h+=`<div class="group-h">Next 2 weeks · ${roSoon.length}</div>`+roSoon.map(g=>reorderCard(g,t)).join("");
@@ -679,6 +709,26 @@ function reorderBar(c,byDate,t){
   if(!g) return "";
   return `<div class="reorder-line"><b>Reorder due</b><span>${esc(listJoin(g.items.map(x=>itemName(x.it))))} · ${g.due<=t?"now":esc(fmtS(g.due))}</span><button type="button" class="small" data-act="ordered" data-c="${esc(c.id)}" data-g="${esc(g.due)}">Mark ordered</button></div>`;
 }
+function payBar(c,byDate,t){
+  const a=payAlert(c,byDate); if(!a) return "";
+  const late=a.date<t;
+  if(a.kind==="invoice") return `<div class="pay-line${late?" late":""}"><b>${late?"Missed invoice":"Invoice coming up"}</b><span>Charge + order ${esc(listJoin(a.names))} · ${esc(whenText(a.date,t))}</span><button type="button" class="small" data-act="payDone" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Charged &amp; ordered</button></div>`;
+  return `<div class="pay-line${late?" late":""}"><b>${late?"Ran out":"Running out"}</b><span>${esc(listJoin(a.names))} · ${esc(whenText(a.date,t))} · call about going recurring</span><button type="button" class="small" data-act="runCalled" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Called</button></div>`;
+}
+function payCard(c,t){
+  const a=payAlert(c,t), late=a.date<t, n=diff(a.date,t), inv=a.kind==="invoice";
+  const chipH=n>0?`<span class="chip soon">In ${n} day${n===1?"":"s"} · ${esc(fmtS(a.date))}</span>`:dueChip(a.date,t);
+  return `<article class="card slim${late?" isLate":""}">
+    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">${inv?(late?"Missed invoice":"Invoice coming up"):(late?"Ran out · one-time":"Running out · one-time")}</span></div>${chipH}</div>
+    <div class="phone-row">${phoneLink(c)}<span class="inv-hint">${inv?`Charge + order <b>${esc(listJoin(a.names))}</b>`:`<b>${esc(listJoin(a.names))}</b> · call to see if they want to go recurring`}</span></div>
+    <div class="actions">
+      ${inv?`<button type="button" class="small primary" data-act="payDone" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Charged &amp; ordered</button>`
+           :`<button type="button" class="small primary" data-act="runCalled" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Called</button>`}
+      ${notesBtn(c)}${moreMenu(c)}
+    </div>
+    ${openNotes.has(c.id)?notesBlock(c):""}
+  </article>`;
+}
 function labsBar(c,byDate,t){
   const l=openLabs(c); if(!l || l.due>byDate) return "";
   return `<div class="labs-line"><b>Bloodwork due</b><span>6-week follow-up labs · ${l.due<=t?(l.due<t?`${diff(t,l.due)} days overdue`:"today"):esc(fmtS(l.due))}</span><button type="button" class="small" data-act="labsDone" data-c="${esc(c.id)}">Mark done</button></div>`;
@@ -704,7 +754,7 @@ function callCard({c,k,i},t){
       ${dueChip(k.due,t)}
     </div>
     ${(c.phone||inv)?`<div class="phone-row">${phoneLink(c)}${inv}</div>`:""}
-    ${reorderBar(c,maxDate(k.due,t),t)}
+    ${payBar(c,maxDate(k.due,t),t)||reorderBar(c,maxDate(k.due,t),t)}
     ${labsBar(c,maxDate(k.due,t),t)}
     <div class="actions">
       <button type="button" class="small primary" data-act="done" data-c="${esc(c.id)}" data-k="${esc(k.id)}">Mark called</button>
@@ -742,7 +792,7 @@ function reorderCard(g,t){
   const c=g.c;
   return `<article class="card slim${g.due<t?" isLate":""}">
     <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${[...new Set(g.items.map(x=>x.it.protocol))].map(chip).join("")}<span class="sub-label">Reorder</span></div>${dueChip(g.due,t)}</div>
-    <div class="items-sum">${g.items.map(({it,r})=>`<div class="it"><b>${esc(itemName(it))}</b><span class="hint">${it.supply}-day supply${r.due!==g.due?` · due ${esc(fmtS(r.due))}, ordering together`:""}</span></div>`).join("")}</div>
+    <div class="items-sum">${g.items.map(({it,r})=>`<div class="it"><b>${esc(itemName(it))}</b><span class="hint">${everyText(it.supply)}${r.due!==g.due?` · due ${esc(fmtS(r.due))}, ordering together`:""}</span></div>`).join("")}</div>
     <div class="phone-row">${phoneLink(c)}</div>
     <div class="actions">
       <button type="button" class="small primary" data-act="ordered" data-c="${esc(c.id)}" data-g="${esc(g.due)}">Mark ordered</button>
@@ -771,7 +821,7 @@ function clientCard(c,t){
   const tl=c.calls.map((k,i)=> k.doneAt ? `<span class="chip done">${esc(callLabel(i))} · called ${esc(fmtS(k.doneAt))}</span>` : `<span class="chip ${k.due<t?"late":k.due===t?"today":"plain"}">${esc(callLabel(i))} · ${esc(fmtS(k.due))}</span>`).join("");
   const items=itemsOf(c).map(it=>{
     const r=openReorder(it), inv=nextInvoice(c,it);
-    const bits=[`${it.supply}-day supply`];
+    const bits=[`order + invoice ${everyText(it.supply)}`];
     if(it.recurring){ bits.push("Recurring"); if(r) bits.push(`reorder ${fmtS(r.due)}`); if(inv) bits.push(`invoice ${fmtS(inv)}`); }
     else if(it.notConverted) bits.push(`Didn't convert: ${it.notConverted.reason}${it.notConverted.detail?` · ${it.notConverted.detail}`:""}`);
     else bits.push("One-time");
@@ -805,7 +855,7 @@ function itemRow(it,withReorder){
   return `<div class="item-row" data-item="${esc(it.id||"")}">
     <select data-f="protocol" aria-label="Protocol">${Object.entries(PROTO).map(([v,l])=>`<option value="${v}"${it.protocol===v?" selected":""}>${l}</option>`).join("")}</select>
     <input data-f="product" list="dl-${esc(it.protocol)}" placeholder="Product, e.g. ${esc({peptides:"KLOW",hrt:"Estradiol",trt:"Testosterone",mwl:"Semaglutide"}[it.protocol])}" value="${esc(it.product||"")}" maxlength="60" aria-label="Product">
-    <label class="mini sup"><input data-f="supply" type="number" min="1" max="365" value="${esc(it.supply)}" aria-label="Supply in days"${it.supplyTouched?' data-touched="1"':""}>days</label>
+    <label class="mini sup"><select data-f="supply" aria-label="Order and invoice every how many months">${[1,2,3,4,6].map(n=>`<option value="${n}"${Number(it.supply)===n?" selected":""}>${n===1?"Monthly":n+" mo"}</option>`).join("")}</select></label>
     <label class="mini rec"><input data-f="recurring" type="checkbox"${it.recurring?" checked":""}>Recurring</label>
     <button type="button" class="x" data-act="rmItem" title="Remove this product" aria-label="Remove this product">×</button>
     ${r?`<label class="mini reo">Next reorder <input data-f="reorder" type="date" value="${esc(r.due)}" data-orig="${esc(r.due)}"></label>`:""}
@@ -817,8 +867,8 @@ function readItems(box){
   const out=[];
   for(const row of rows){
     const g=f=>row.querySelector(`[data-f="${f}"]`);
-    const supply=intIn(g("supply").value,1,365);
-    if(supply===null) return {err:"Each product needs a supply length of 1 to 365 days."};
+    const supply=intIn(g("supply").value,1,12);
+    if(supply===null) return {err:"Each product needs how often to order (in months)."};
     const reo=g("reorder");
     if(reo && !isDate(reo.value)) return {err:"Each reorder needs a date."};
     out.push({id:row.dataset.item||"", protocol:g("protocol").value, product:g("product").value.trim(), supply, recurring:g("recurring").checked, reorder:reo?reo.value:null, reorderOrig:reo?reo.dataset.orig:null});
@@ -891,7 +941,7 @@ function saveEdit(c){
   const orig=Object.fromEntries(c.calls.map(k=>[k.id,k.doneAt||k.due]));
   if((dv||null)!==(c.delivered||null) || d1!==c.d1 || d2!==c.d2){
     c.d1=d1; c.d2=d2; c.delivered=dv||null;
-    if(!c.delivered){ c.calls=[]; itemsOf(c).forEach(it=>{ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }); }
+    if(!c.delivered){ c.calls=[]; }
     else if(!c.calls.length) startCalls(c);
     else {
       if(!c.calls[0].doneAt) c.calls[0].due=addDays(c.delivered,d1);
@@ -914,7 +964,7 @@ function saveEdit(c){
     if(wasRec && !it.recurring){ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }
     const r=openReorder(it);
     if(r && x.reorder && x.reorder!==x.reorderOrig) r.due=x.reorder;
-    else if(r && oldSupply!==it.supply && isDate(c.delivered)){ const k=Number.isInteger(r.slot)?r.slot:nextSlot(c,it); r.slot=k; r.due=slotDate(c,it,k); }
+    else if(r && oldSupply!==it.supply){ const k=Number.isInteger(r.slot)?r.slot:nextSlot(c,it); r.slot=k; r.due=slotDate(c,it,k); }
   }
   // bloodwork: a typed date wins; a newly added HRT/TRT product gets its 6-week labs
   if(labIn && openLabs(c) && labIn.value!==labIn.defaultValue) openLabs(c).due=labIn.value;
@@ -942,7 +992,7 @@ function notesBlock(c){
 }
 
 /* ---------- add form ---------- */
-function formRow(it){ $("fItems").insertAdjacentHTML("beforeend", itemRow(it||{protocol:"peptides",product:"",supply:28,recurring:false},false)); }
+function formRow(it){ $("fItems").insertAdjacentHTML("beforeend", itemRow(it||{protocol:"peptides",product:"",supply:1,recurring:false},false)); }
 function readForm(){
   const name=$("fName").value.trim(), phone=$("fPhone").value.trim(), start=$("fStart").value, del=$("fDel").value;
   const d1=intIn($("fD1").value,1,365), d2=intIn($("fD2").value,1,365);
@@ -966,8 +1016,8 @@ function updatePreview(){
   const lines=ri.items.map(x=>{
     const nm=x.product||PROTO[x.protocol];
     if(!x.recurring) return `<div><b>${esc(nm)}</b> · one-time (asked after the 2nd call)</div>`;
-    const ro=isDate(del)?`reorder ${esc(fmtS(addDays(del,reorderOffset(x.supply))))}`:`reorder ${reorderOffset(x.supply)} days after delivery`;
-    return `<div><b>${esc(nm)}</b> · ${ro}, then every ${x.supply} days · invoice ${billMonths(x.protocol)===2?"every 2 months":"monthly"} on the ${day}</div>`;
+    const first=addMonthsAnchor(start,x.supply,Number(start.slice(8)));
+    return `<div><b>${esc(nm)}</b> · order + invoice ${everyText(x.supply)} on the ${day}, first ${esc(fmtS(first))}</div>`;
   }).join("");
   $("preview").innerHTML=`${isDate(del)?"":`<div><b>Waiting on delivery</b> · shows at the top of Due today</div>`}
     <div><b>1st call</b> · ${callAt(d1)}</div><div><b>2nd call</b> · ${callAt(d2)}</div>
@@ -982,7 +1032,7 @@ $("addForm").addEventListener("submit",e=>{
   er.hidden=true;
   const c={id:uid(), name:r.name, phone:r.phone, start:r.start, delivered:r.delivered, d1:r.d1, d2:r.d2, active:true, created:new Date().toISOString(), calls:[], notes:[], v:2,
     items:r.items.map(newItem)};
-  c.items.forEach(it=>{ if(it.recurring) startBilling(it,c); });
+  c.items.forEach(it=>{ if(it.recurring){ startBilling(it,c); ensureReorder(c,it); } });
   const firstNote=$("fNote").value.trim(); if(firstNote) addNote(c,firstNote);
   c.labsV=2; ensureLabs(c);
   if(c.delivered) startCalls(c);
@@ -999,7 +1049,7 @@ $("list").addEventListener("click",async e=>{
   const b=e.target.closest("button"); if(!b) return;
   const a=b.dataset.act, c=b.dataset.c?find(b.dataset.c):null;
   if(a==="rmItem"){ rowRemove(b); return; }
-  if(a==="eAddItem"){ $("eItems").insertAdjacentHTML("beforeend", itemRow({protocol:"peptides",product:"",supply:28,recurring:false},false)); const r=[...$("eItems").querySelectorAll(".item-row")].pop(); r&&r.querySelector('[data-f="product"]').focus(); return; }
+  if(a==="eAddItem"){ $("eItems").insertAdjacentHTML("beforeend", itemRow({protocol:"peptides",product:"",supply:1,recurring:false},false)); const r=[...$("eItems").querySelectorAll(".item-row")].pop(); r&&r.querySelector('[data-f="product"]').focus(); return; }
   if(a==="notesToggle" && c){ openNotes.has(c.id)?openNotes.delete(c.id):openNotes.add(c.id); render(); return; }
   if(a==="addNote" && c){
     const text=(noteDrafts[c.id]||"").trim(); if(!text){ toast("Type a note first."); return; }
@@ -1012,7 +1062,7 @@ $("list").addEventListener("click",async e=>{
     const v=$("delDate").value, t0=today();
     if(!isDate(v) || v<c.start || v>t0){ toast(v>t0?"The delivered date can't be in the future.":"Pick the day it was delivered (on or after the paid date)."); return; }
     c.delivered=v; startCalls(c); deliverOpen=null; save(); render();
-    toast(`Delivered. 1st call for ${c.name}: ${fmt(c.calls[0].due)}`, "Undo", ()=>{ if(c.calls.some(k=>k.doneAt)) return; c.delivered=null; c.calls=[]; itemsOf(c).forEach(it=>{ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }); save(); render(); toast("Back to waiting on delivery"); });
+    toast(`Delivered. 1st call for ${c.name}: ${fmt(c.calls[0].due)}`, "Undo", ()=>{ if(c.calls.some(k=>k.doneAt)) return; c.delivered=null; c.calls=[]; save(); render(); toast("Back to waiting on delivery"); });
     return;
   }
   if(a==="done" && c){
@@ -1045,6 +1095,19 @@ $("list").addEventListener("click",async e=>{
     g.items.forEach(it=>{ if(!Array.isArray(it.charges)) it.charges=[]; it.charges.push({date:g.date,at:today()}); it.billedThrough=g.date; });
     save(); render(); const nx=nextInvoiceGroup(c);
     toast(`Charged.${nx?` Next invoice for ${c.name}: ${fmt(nx.date)}`:""}`, "Undo", ()=>{ before.forEach(([it,bt])=>{ it.charges.pop(); it.billedThrough=bt; }); save(); render(); toast("Moved back to Invoices"); });
+  }
+  else if(a==="payDone" && c){
+    const d=b.dataset.g, inv=invoiceGroups(c).find(x=>x.date===d), ros=reorderGroups(c).filter(x=>diff(x.due,d)<=LEAD);
+    const before=inv?inv.items.map(it=>[it,it.billedThrough]):[];
+    if(inv) inv.items.forEach(it=>{ if(!Array.isArray(it.charges)) it.charges=[]; it.charges.push({date:inv.date,at:today()}); it.billedThrough=inv.date; });
+    const undos=ros.map(g=>markOrdered(c,g));
+    save(); render(); const nx=nextInvoiceGroup(c);
+    toast(`Charged and ordered for ${c.name}.${nx?` Next invoice ${fmtS(nx.date)}.`:""}`, "Undo", ()=>{ before.forEach(([it,bt])=>{ it.charges.pop(); it.billedThrough=bt; }); undos.reverse().forEach(u=>u()); save(); render(); toast("Moved back to Due today"); });
+  }
+  else if(a==="runCalled" && c){
+    const al=payAlert(c,addDays(today(),HEADS_UP)); if(!al || al.kind!=="runout") return;
+    al.items.forEach(it=>it.runOutCalled=today()); save(); render();
+    undoTarget=null; openDecision(c,al.items[0].id);
   }
   else if(a==="decide" && c){ undoTarget=null; openDecision(c); }
   else if(a==="cameBack" && c){ const it=itemsOf(c).find(x=>x.notConverted); undoTarget=null; if(it) openDecision(c,it.id); }
@@ -1116,14 +1179,14 @@ function cvHints(){
   const d=curDec(); if(!d) return;
   const p=$("cvProto").value, prod=$("cvProd").value.trim(), was=itemName(d.it);
   $("cvSwitch").textContent = (p===d.it.protocol && (prod||"")===(d.it.product||"")) ? `Continuing ${was}. Change the protocol or product if they switched.` : `Switching from ${was} to ${prod||PROTO[p]}.`;
-  const sup=intIn($("cvSupply").value,1,365)||d.it.supply;
-  $("cvNext").textContent=`Reorders every ${sup} days. Invoices ${billMonths(p)===2?"every 2 months":"monthly"} on the ${payDay(d.c)}.`;
+  const sup=intIn($("cvSupply").value,1,12)||d.it.supply;
+  $("cvNext").textContent=`Order + invoice ${everyText(sup)} on the ${payDay(d.c)}.`;
 }
 function closeDecision(){ decId=null; decItem=null; decForced=false; undoTarget=null; if($("convDlg").open) $("convDlg").close(); }
 function afterDecision(c){ save(); render(); if(!decForced && pendingItems(c).length){ undoTarget=null; openDecision(c); } else closeDecision(); }
 $("cvProto").addEventListener("change",()=>{ $("cvProd").setAttribute("list","dl-"+$("cvProto").value); if(!$("cvSupply").dataset.touched) $("cvSupply").value=defaultSupply($("cvProto").value,$("cvProd").value); cvHints(); });
 $("cvProd").addEventListener("input",()=>{ if(!$("cvSupply").dataset.touched) $("cvSupply").value=defaultSupply($("cvProto").value,$("cvProd").value); cvHints(); });
-$("cvSupply").addEventListener("input",()=>{ $("cvSupply").dataset.touched="1"; cvHints(); });
+$("cvSupply").addEventListener("change",()=>{ $("cvSupply").dataset.touched="1"; cvHints(); });
 $("cvWhat").addEventListener("input",()=>{ $("cvErr").hidden=true; });
 $("cvWhy").addEventListener("input",()=>{ $("cvErr3").hidden=true; });
 $("cvYes").addEventListener("click",()=>{ $("cvStep1").hidden=true; $("cvStep2").hidden=false; $("cvWhat").focus(); });
@@ -1131,7 +1194,7 @@ $("cvNo").addEventListener("click",()=>{ $("cvStep1").hidden=true; $("cvStep3").
 $("cvBack").addEventListener("click",()=>{ $("cvStep2").hidden=true; $("cvStep1").hidden=false; $("cvYes").focus(); });
 $("cvBack3").addEventListener("click",()=>{ $("cvStep3").hidden=true; $("cvStep1").hidden=false; $("cvNo").focus(); });
 $("cvUndo").addEventListener("click",()=>{ const u=undoTarget; closeDecision(); if(u && clients.includes(u.c)){ undoCall(u.c,u.li); save(); render(); toast(`${callLabel(u.li)} moved back to the call list`); } });
-$("cvLater").addEventListener("click",()=>{ const d=curDec(); closeDecision(); if(d) toast(`${d.c.name} is waiting in Due today until you answer.`); });
+$("cvLater").addEventListener("click",()=>{ const d=curDec(); closeDecision(); if(d) toast(needsDecision(d.c)?`${d.c.name} is waiting in Due today until you answer.`:`Still one-time. You'll be asked again after ${d.c.name}'s 2nd call.`); });
 $("convDlg").addEventListener("cancel",e=>{ e.preventDefault(); $("cvLater").click(); });
 $("cvStep3").addEventListener("submit",e=>{
   e.preventDefault();
@@ -1146,8 +1209,8 @@ $("cvStep3").addEventListener("submit",e=>{
 $("cvStep2").addEventListener("submit",e=>{
   e.preventDefault();
   const d=curDec(); if(!d){ closeDecision(); return; }
-  const what=$("cvWhat").value.trim(), p=$("cvProto").value, prod=$("cvProd").value.trim(), sup=intIn($("cvSupply").value,1,365);
-  if(sup===null){ $("cvErr").textContent="Enter how many days the supply lasts (1 to 365)."; $("cvErr").hidden=false; return; }
+  const what=$("cvWhat").value.trim(), p=$("cvProto").value, prod=$("cvProd").value.trim(), sup=intIn($("cvSupply").value,1,12);
+  if(sup===null){ $("cvErr").textContent="Pick how often to order and invoice."; $("cvErr").hidden=false; return; }
   if(!what){ $("cvErr").textContent="Add a few words about what they're doing now."; $("cvErr").hidden=false; $("cvWhat").focus(); return; }
   const was=itemName(d.it), switched=p!==d.it.protocol || prod!==(d.it.product||"");
   addNote(d.c, switched?`Converted to recurring, switched from ${was} to ${prod||PROTO[p]}: ${what}`:`Converted ${was} to recurring: ${what}`);

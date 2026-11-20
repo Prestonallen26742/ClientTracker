@@ -201,6 +201,8 @@ details.notes[open] summary::before{content:"\25BE  "}
 .items-sum .it{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
 .items-sum .it .hint{margin:0}
 .chips{display:inline-flex;gap:4px;flex-wrap:wrap}
+.labs-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px;padding:7px 10px;font-size:14px}
+.labs-line b{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -329,7 +331,7 @@ details.notes[open] summary::before{content:"\25BE  "}
              billedThrough, charges:[], convertedAt, notConverted:{reason,detail,at} }
    ===================================================================== */
 const PROTO={peptides:"Peptides",hrt:"HRT",trt:"TRT",mwl:"MWL"};
-const REPEAT=21, LEAD=7;            // calls every 21 days after the 2nd; reorder 7 days before a product runs out
+const REPEAT=21, LEAD=7, LABS_DAYS=42;   // HRT/TRT follow-up bloodwork 6 weeks after the paid date            // calls every 21 days after the 2nd; reorder 7 days before a product runs out
 const $=id=>document.getElementById(id);
 const noteDrafts={}, openNotes=new Set();
 let clients=[], settings={repeat:REPEAT}, tab="due", search="", show="recurring", editing=null;
@@ -363,8 +365,8 @@ const find=id=>clients.find(c=>c.id===id);
 /* ---------- products ---------- */
 function defaultSupply(protocol,product){
   const p=String(product||"").toLowerCase();
-  if(/progesterone/.test(p)) return 60;
-  if(/estradiol|estrogen|testosterone|\btest\b|hcg|enclomiphene|anastrozole|dhea/.test(p)) return 56;
+  if(/progesterone|enclomiphene|enclomophine/.test(p)) return 60;
+  if(/estradiol|estrogen|testosterone|\btest\b|hcg|anastrozole|dhea/.test(p)) return 56;
   return (protocol==="hrt"||protocol==="trt") ? 56 : 28;
 }
 function itemsOf(c){ if(!Array.isArray(c.items)) c.items=[]; return c.items; }
@@ -425,6 +427,23 @@ function invoiceGroups(c){
 function nextInvoiceGroup(c){ return invoiceGroups(c)[0]||null; }
 function payDay(c){ return ordinal(Number(c.start.slice(8))); }
 
+/* ---------- bloodwork: HRT/TRT follow-up labs 6 weeks after the paid date ---------- */
+function hormoneItems(c){ return itemsOf(c).filter(it=>(it.protocol==="hrt"||it.protocol==="trt") && !it.notConverted); }
+function labsOf(c){ if(!Array.isArray(c.labs)) c.labs=[]; return c.labs; }
+function openLabs(c){ return c.active ? labsOf(c).find(l=>!l.doneAt)||null : null; }
+// earlier version counted from delivery: move untouched open labs to 6 weeks after the paid date
+function labsFromPaid(c){ const l=labsOf(c).find(x=>!x.doneAt); if(l && isDate(c.delivered) && l.due===addDays(c.delivered,LABS_DAYS)) l.due=addDays(c.start,LABS_DAYS); }
+function ensureLabs(c,existing){
+  if(!c.active || !isDate(c.start) || labsOf(c).length) return null;
+  const hs=hormoneItems(c); if(!hs.length) return null;
+  // paid date, or the day HRT/TRT was added if that came later
+  const base=hs.map(it=>maxDate(it.startedAt||c.start,c.start)).sort()[0];
+  const due=addDays(base,LABS_DAYS);
+  // clients already on the books: a 6-week mark more than 2 weeks ago is assumed done
+  const l = existing && due<addDays(today(),-14) ? {id:uid(),due,doneAt:due,assumed:true} : {id:uid(),due,doneAt:null};
+  labsOf(c).push(l); return l;
+}
+
 /* ---------- calls: one set per client ---------- */
 function callLabel(i){ return i===0?"1st call":i===1?"2nd call":"Recurring call #"+(i-1); }
 function openCall(c){ return (c.calls||[]).find(x=>!x.doneAt) || null; }
@@ -432,6 +451,7 @@ function startCalls(c){
   if(!isDate(c.delivered) || (c.calls||[]).length) return;
   c.calls=[{id:uid(),due:addDays(c.delivered,c.d1),doneAt:null},{id:uid(),due:addDays(c.delivered,c.d2),doneAt:null}];
   for(const it of recurringItems(c)){ ensureReorder(c,it); }
+  ensureLabs(c);
 }
 // after a call is made: keep calling every 21 days while anything is recurring
 function bookNextCall(c){
@@ -463,7 +483,7 @@ function migrate(c){
   if(!Array.isArray(c.calls)) c.calls=[];
   if(!Array.isArray(c.notes)) c.notes=[];
   if(!("delivered" in c)) c.delivered = c.calls.length ? c.start : null;
-  if(c.v===2) return;
+  if(c.v===2){ if(!c.labsV){ c.labsV=2; ensureLabs(c,true); } else if(c.labsV===1){ c.labsV=2; labsFromPaid(c); } return; }
   // one protocol per client -> a list of products
   const p=c.protocol in PROTO ? c.protocol : "peptides";
   const it={id:uid(), protocol:p, product:"", supply:defaultSupply(p,""), recurring:!!c.recurring,
@@ -480,6 +500,7 @@ function migrate(c){
   for(const k of ["protocol","recurring","reorders","charges","convertedAt","notConverted","billedThrough","billV","rep21"]) delete c[k];
   c.v=2;
   if(it.recurring) ensureReorder(c,it);
+  c.labsV=2; ensureLabs(c,true);
 }
 // a few plain fields so the Google Sheet's readable columns stay filled in
 function stamp(c){
@@ -558,20 +579,24 @@ function render(){
   $("todayLbl").textContent="Today: "+fmt(t);
   const open=allOpen(), due=open.filter(x=>x.k.due<=t), up=open.filter(x=>x.k.due>t);
   const decide=clients.filter(needsDecision), waitingList=clients.filter(waiting).sort((a,b)=>a.start.localeCompare(b.start));
+  const hasCallCard=new Set([...due,...up].map(x=>x.c.id)), dueIds=new Set(due.map(x=>x.c.id));
+  const labsSolo=clients.filter(c=>{ const l=openLabs(c); return l && !dueIds.has(c.id) && (l.due<=t || !hasCallCard.has(c.id)); }).sort((a,b)=>openLabs(a).due.localeCompare(openLabs(b).due));
+  const labsSoloNow=labsSolo.filter(c=>openLabs(c).due<=t), labsSoloLater=labsSolo.filter(c=>openLabs(c).due>t && !hasCallCard.has(c.id));
   const soonEnd=addDays(t,14);
   const ro=allReorderGroups(), roNow=ro.filter(g=>g.due<=t), roSoon=ro.filter(g=>g.due>t && g.due<=soonEnd);
   const inv=allInvoiceGroups(), invNow=inv.filter(g=>g.date<=t), invSoon=inv.filter(g=>g.date>t && g.date<=soonEnd);
-  $("nDue").textContent=due.length+decide.length+waitingList.length; $("nUp").textContent=up.length;
+  $("nDue").textContent=due.length+decide.length+waitingList.length+labsSoloNow.length; $("nUp").textContent=up.length+labsSoloLater.length;
   $("nOrder").textContent=roNow.length; $("nInv").textContent=invNow.length;
   $("nClients").textContent=clients.filter(c=>c.active).length;
   $("toolbar").hidden = tab!=="clients";
   let h="";
   if(tab==="due"){
-    h = (due.length||decide.length||waitingList.length) ? waitingList.map(c=>waitCard(c,t)).join("")+decide.map(c=>decideCard(c,t)).join("")+due.map(x=>callCard(x,t)).join("")
+    h = (due.length||decide.length||waitingList.length||labsSoloNow.length) ? waitingList.map(c=>waitCard(c,t)).join("")+decide.map(c=>decideCard(c,t)).join("")+labsSoloNow.map(c=>labsCard(c,t)).join("")+due.map(x=>callCard(x,t)).join("")
       : empty(clients.length?"No calls due today":"No clients yet", clients.length?"Check Upcoming to see who's next.":"Add a client on the left and their calls will show up here.");
   } else if(tab==="upcoming"){
-    if(!up.length) h=empty("Nothing scheduled","Calls appear here once a client's product is delivered.");
-    else { let last=""; for(const x of up){ if(x.k.due!==last){ const n=diff(x.k.due,t); h+=`<div class="group-h">${esc(fmt(x.k.due))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=x.k.due; } h+=callCard(x,t); } }
+    const upAll=[...up.map(x=>({d:x.k.due,x})),...labsSoloLater.map(c=>({d:openLabs(c).due,c}))].sort((a,b)=>a.d.localeCompare(b.d));
+    if(!upAll.length) h=empty("Nothing scheduled","Calls appear here once a client's product is delivered.");
+    else { let last=""; for(const y of upAll){ if(y.c){ if(y.d!==last){ const n=diff(y.d,t); h+=`<div class="group-h">${esc(fmt(y.d))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=y.d; } h+=labsCard(y.c,t); continue; } const x=y.x; if(x.k.due!==last){ const n=diff(x.k.due,t); h+=`<div class="group-h">${esc(fmt(x.k.due))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=x.k.due; } h+=callCard(x,t); } }
   } else if(tab==="order"){
     if(!roNow.length && !roSoon.length) h=empty("Nothing to order in the next 2 weeks","Each product shows up here 7 days before it runs out.");
     else {
@@ -636,6 +661,23 @@ function reorderBar(c,byDate,t){
   if(!g) return "";
   return `<div class="reorder-line"><b>Reorder due</b><span>${esc(listJoin(g.items.map(x=>itemName(x.it))))} · ${g.due<=t?"now":esc(fmtS(g.due))}</span><button type="button" class="small" data-act="ordered" data-c="${esc(c.id)}" data-g="${esc(g.due)}">Mark ordered</button></div>`;
 }
+function labsBar(c,byDate,t){
+  const l=openLabs(c); if(!l || l.due>byDate) return "";
+  return `<div class="labs-line"><b>Bloodwork due</b><span>6-week follow-up labs · ${l.due<=t?(l.due<t?`${diff(t,l.due)} days overdue`:"today"):esc(fmtS(l.due))}</span><button type="button" class="small" data-act="labsDone" data-c="${esc(c.id)}">Mark done</button></div>`;
+}
+function labsCard(c,t){
+  const l=openLabs(c);
+  return `<article class="card slim${l.due<t?" isLate":""}">
+    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">6-week bloodwork</span></div>${dueChip(l.due,t)}</div>
+    ${c.phone?`<div class="phone-row">${phoneLink(c)}</div>`:""}
+    <div class="actions">
+      <button type="button" class="small primary" data-act="labsDone" data-c="${esc(c.id)}">Mark done</button>
+      <button type="button" class="small" data-act="labsSnooze" data-c="${esc(c.id)}">Move to tomorrow</button>
+      ${notesBtn(c)}${moreMenu(c)}
+    </div>
+    ${openNotes.has(c.id)?notesBlock(c):""}
+  </article>`;
+}
 function callCard({c,k,i},t){
   const inv=invoiceHint(c,t);
   return `<article class="card slim${k.due<t?" isLate":""}">
@@ -645,6 +687,7 @@ function callCard({c,k,i},t){
     </div>
     ${(c.phone||inv)?`<div class="phone-row">${phoneLink(c)}${inv}</div>`:""}
     ${reorderBar(c,maxDate(k.due,t),t)}
+    ${labsBar(c,maxDate(k.due,t),t)}
     <div class="actions">
       <button type="button" class="small primary" data-act="done" data-c="${esc(c.id)}" data-k="${esc(k.id)}">Mark called</button>
       ${notesBtn(c)}${moreMenu(c,k)}
@@ -722,7 +765,7 @@ function clientCard(c,t){
       ${countdown}
     </div>
     <div class="phone-row">${phoneLink(c)}<span class="inv-hint">Paid ${esc(fmtS(c.start))} · invoices on the ${esc(payDay(c))}${isDate(c.delivered)?` · delivered ${esc(fmtS(c.delivered))}`:""}</span></div>
-    <div class="items-sum">${items}</div>
+    <div class="items-sum">${items}${(()=>{ const l=labsOf(c).slice(-1)[0]; if(!l) return ""; return `<div class="it"><span class="chip ${l.doneAt?"done":l.due<=t?"late":"plain"}">Bloodwork</span><span class="hint">6-week labs · ${l.doneAt?(l.assumed?"assumed done":`done ${esc(fmtS(l.doneAt))}`):`due ${esc(fmtS(l.due))}`}</span></div>`; })()}</div>
     ${tl?`<div class="timeline">${tl}</div>`:""}
     ${editing===c.id ? editPanel(c) : `<div class="actions">
       ${st==="waiting"?`<button type="button" class="small primary" data-act="delOpen" data-c="${esc(c.id)}">Mark delivered</button>`:""}
@@ -799,6 +842,7 @@ function editPanel(c){
       <div><label for="eD2">2nd call · days out</label><input id="eD2" type="number" min="1" max="365" inputmode="numeric" value="${esc(c.d2)}"></div></div>
     <p class="hint" style="margin:-4px 0 0">The paid date sets the invoice day. The delivered date and call days set the first 2 calls (if they haven't been made yet).</p>
     ${c.calls.length?`<h4>Calls</h4><div class="edit-dates">${c.calls.map((k,i)=>`<div><label for="eK_${esc(k.id)}">${esc(callLabel(i))} · ${k.doneAt?"called on":"due"}</label><input id="eK_${esc(k.id)}" type="date" data-kd="${esc(k.id)}" value="${esc(k.doneAt||k.due)}"></div>`).join("")}</div>`:""}
+    ${openLabs(c)?`<h4>Bloodwork</h4><div class="edit-dates"><div><label for="eLabs">6-week labs · due</label><input id="eLabs" type="date" value="${esc(openLabs(c).due)}"></div></div>`:""}
     ${c.calls.some(k=>k.doneAt)?`<div><button type="button" class="small" data-act="undo" data-c="${esc(c.id)}">Mark last call as not called</button></div>`:""}
     <p class="err" id="editErr" hidden></p>
     <div class="actions"><button type="button" class="small primary" data-act="saveEdit" data-c="${esc(c.id)}">Save changes</button><button type="button" class="small ghost" data-act="cancelEdit">Cancel</button></div>
@@ -819,9 +863,12 @@ function saveEdit(c){
   if(d1===null||d2===null||d2<=d1) return fail("Call days must be 1 to 365, and the 2nd call more days out than the 1st.");
   const kIns=[...document.querySelectorAll('[data-edit] [data-kd]')];
   if(kIns.some(i=>!isDate(i.value))) return fail("Every call needs a date.");
+  const labIn=$("eLabs"); if(labIn && !isDate(labIn.value)) return fail("Pick a date for the bloodwork.");
   if(kIns.some(i=>{ const k=c.calls.find(x=>x.id===i.dataset.kd); return k && k.doneAt && i.value>t0; })) return fail("A call that was already made can't have a date in the future.");
 
+  const oldStart=c.start;
   c.name=name; c.phone=ph?fmtPhone(ph):""; c.start=st;
+  { const l=openLabs(c); if(l && st!==oldStart && l.due===addDays(oldStart,LABS_DAYS) && (!labIn || labIn.value===l.due)) l.due=addDays(st,LABS_DAYS); }
   // schedule: delivered date + call days move the first 2 calls if they haven't been made
   const orig=Object.fromEntries(c.calls.map(k=>[k.id,k.doneAt||k.due]));
   if((dv||null)!==(c.delivered||null) || d1!==c.d1 || d2!==c.d2){
@@ -842,7 +889,7 @@ function saveEdit(c){
   c.items=itemsOf(c).filter(it=>keep.has(it.id));
   for(const x of ri.items){
     let it=c.items.find(i=>i.id===x.id);
-    if(!it){ it=newItem(x); c.items.push(it); if(it.recurring){ startBilling(it,c); it.convertedAt=t0; ensureReorder(c,it); } continue; }
+    if(!it){ it=newItem(x); if(t0>c.start) it.startedAt=t0; c.items.push(it); if(it.recurring){ startBilling(it,c); it.convertedAt=t0; ensureReorder(c,it); } continue; }
     const wasRec=it.recurring, oldSupply=it.supply;
     it.protocol=x.protocol; it.product=x.product; it.supply=x.supply; it.recurring=x.recurring;
     if(!wasRec && it.recurring){ delete it.notConverted; it.convertedAt=t0; startBilling(it,c); ensureReorder(c,it); }
@@ -851,6 +898,9 @@ function saveEdit(c){
     if(r && x.reorder && x.reorder!==x.reorderOrig) r.due=x.reorder;
     else if(r && oldSupply!==it.supply && isDate(c.delivered)) r.due=firstReorderDate(c,it);
   }
+  // bloodwork: a typed date wins; a newly added HRT/TRT product gets its 6-week labs
+  if(labIn && openLabs(c) && labIn.value!==labIn.defaultValue) openLabs(c).due=labIn.value;
+  ensureLabs(c);
   // nothing recurring any more: drop an upcoming recurring call; something recurring after the 2nd call: keep calling
   const oc=openCall(c);
   if(!anyRecurring(c) && oc && c.calls.indexOf(oc)>=2) c.calls=c.calls.filter(k=>k!==oc);
@@ -916,6 +966,7 @@ $("addForm").addEventListener("submit",e=>{
     items:r.items.map(newItem)};
   c.items.forEach(it=>{ if(it.recurring) startBilling(it,c); });
   const firstNote=$("fNote").value.trim(); if(firstNote) addNote(c,firstNote);
+  c.labsV=2; ensureLabs(c);
   if(c.delivered) startCalls(c);
   clients.push(c); save(); render();
   $("fName").value=""; $("fPhone").value=""; $("fNote").value=""; $("fStart").value=today(); $("fDel").value=""; $("fItems").innerHTML=""; formRow(); updatePreview();
@@ -954,6 +1005,11 @@ $("list").addEventListener("click",async e=>{
     if(li===1 && needsDecision(c)){ undoTarget={c,li}; openDecision(c); }
     else toast(nx ? `Done. Next call for ${c.name}: ${fmt(nx.due)}` : "Marked as called", "Undo", undo);
   }
+  else if(a==="labsDone" && c){
+    const l=openLabs(c); if(!l) return; l.doneAt=today(); save(); render();
+    toast(`Bloodwork marked done for ${c.name}`, "Undo", ()=>{ l.doneAt=null; save(); render(); toast("Moved back to the list"); });
+  }
+  else if(a==="labsSnooze" && c){ const l=openLabs(c); if(!l) return; l.due=addDays(today(),1); save(); render(); toast(`Moved to ${fmt(l.due)}`); }
   else if(a==="snooze" && c){ const k=c.calls.find(x=>x.id===b.dataset.k); if(!k) return; k.due=addDays(today(),1); save(); render(); toast(`Moved to ${fmt(k.due)}`); }
   else if(a==="ordered" && c){
     const g=reorderGroups(c).find(x=>x.due===b.dataset.g); if(!g) return;
@@ -1074,7 +1130,9 @@ $("cvStep2").addEventListener("submit",e=>{
   if(!what){ $("cvErr").textContent="Add a few words about what they're doing now."; $("cvErr").hidden=false; $("cvWhat").focus(); return; }
   const was=itemName(d.it), switched=p!==d.it.protocol || prod!==(d.it.product||"");
   addNote(d.c, switched?`Converted to recurring, switched from ${was} to ${prod||PROTO[p]}: ${what}`:`Converted ${was} to recurring: ${what}`);
+  if(p!==d.it.protocol && (p==="hrt"||p==="trt")) d.it.startedAt=today();
   Object.assign(d.it,{protocol:p, product:prod, supply:sup, recurring:true, convertedAt:today()}); delete d.it.notConverted;
+  ensureLabs(d.c);
   startBilling(d.it,d.c);
   ensureReorder(d.c,d.it,$("cvOrderNow").checked?today():null);
   bookNextCall(d.c);

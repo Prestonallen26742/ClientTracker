@@ -178,6 +178,29 @@ details.notes[open] summary::before{content:"\25BE  "}
 .danger-text{color:var(--late)!important}
 .demo-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:14px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.item-list{display:grid;gap:8px}
+.item-row{display:grid;grid-template-columns:96px minmax(0,1fr) 92px auto 28px;gap:6px;align-items:center;background:var(--sunk);border-radius:8px;padding:8px}
+.item-row select,.item-row input[type=text],.item-row input:not([type]),.item-row input[type=number],.item-row input[type=date]{padding:7px 8px;font-size:14px}
+.item-row .mini{display:flex;align-items:center;gap:4px;margin:0;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--muted);font-weight:500;white-space:nowrap}
+.item-row .mini input[type=number]{width:58px}
+.item-row .mini input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
+.item-row .reo{grid-column:2/-1}
+.item-row .reo input{width:auto}
+.item-row .x{border:none;background:none;color:var(--muted);font-size:20px;line-height:1;padding:0}
+.item-row .x:hover{color:var(--late)}
+.add-item{justify-self:start}
+/* narrow places (the Add a client panel, phones): two lines per product */
+#fItems .item-row{grid-template-columns:92px minmax(0,1fr) 22px}
+#fItems .item-row [data-f=protocol]{grid-column:1;grid-row:1}
+#fItems .item-row [data-f=product]{grid-column:2;grid-row:1}
+#fItems .item-row .x{grid-column:3;grid-row:1}
+#fItems .item-row .sup{grid-column:1;grid-row:2}
+#fItems .item-row .rec{grid-column:2/-1;grid-row:2}
+@media (max-width:600px){.item-row{grid-template-columns:92px minmax(0,1fr) 22px}.item-row [data-f=protocol]{grid-column:1;grid-row:1}.item-row [data-f=product]{grid-column:2;grid-row:1}.item-row .x{grid-column:3;grid-row:1}.item-row .sup{grid-column:1;grid-row:2}.item-row .rec{grid-column:2/-1;grid-row:2}.item-row .reo{grid-column:1/-1;grid-row:3}}
+.items-sum{display:grid;gap:4px;font-size:14px}
+.items-sum .it{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.items-sum .it .hint{margin:0}
+.chips{display:inline-flex;gap:4px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -188,17 +211,11 @@ details.notes[open] summary::before{content:"\25BE  "}
       <p class="sub">Add a client once. Their calls show up here on the right day. <span class="mono" id="todayLbl"></span></p>
     </div>
     <div class="head-tools">
-            <span class="sync" id="syncStatus" data-state="busy">Loading…</span>
-      <button id="notifyBtn" type="button" hidden>Turn on reminders</button>
+      <span class="sync" id="syncStatus" data-state="busy">Loading…</span>
       <button id="restoreBtn" type="button" title="Bring in clients from a backup file made with the old version">Import backup</button>
       <input id="restoreFile" type="file" accept="application/json,.json" hidden>
     </div>
   </header>
-
-  <div class="demo-bar" id="demoBar" hidden>
-    <span><b>Showing example clients.</b> Click anything to try it. Nothing here is saved, and your real list is untouched.</span>
-    <button class="small primary" type="button" id="demoExit">Back to my real list</button>
-  </div>
 
   <div class="grid">
     <aside class="panel">
@@ -213,17 +230,17 @@ details.notes[open] summary::before{content:"\25BE  "}
           <input id="fPhone" type="tel" maxlength="20" placeholder="(616) 555-0123">
         </div>
         <div>
-          <label>Protocol</label>
-          <div class="seg" role="radiogroup" aria-label="Protocol">
-            <input type="radio" name="proto" id="pPep" value="peptides" checked><label for="pPep">Peptides</label>
-            <input type="radio" name="proto" id="pHrt" value="hrt"><label for="pHrt">HRT</label>
-            <input type="radio" name="proto" id="pTrt" value="trt"><label for="pTrt">TRT</label>
-            <input type="radio" name="proto" id="pMwl" value="mwl"><label for="pMwl">MWL</label>
-          </div>
+          <label>What they're on</label>
+          <div class="item-list" id="fItems"></div>
+          <button type="button" class="small add-item" id="fAddItem" style="margin-top:8px">+ Add another product</button>
+          <p class="hint">Each product gets its own reorder date, 7 days before it runs out. Tick Recurring for each one they're staying on.</p>
         </div>
         <div>
-          <label for="fStart">Start date</label>
-          <input id="fStart" type="date" required>
+          <div class="row2">
+            <div><label for="fStart">Paid date</label><input id="fStart" type="date" required></div>
+            <div><label for="fDel">Delivered</label><input id="fDel" type="date"></div>
+          </div>
+          <p class="hint">Leave Delivered blank if the product hasn't arrived yet. Calls start counting from delivery.</p>
         </div>
         <div class="row2">
           <div><label for="fD1">1st call · days out</label><input id="fD1" type="number" min="1" max="365" inputmode="numeric" value="5"></div>
@@ -233,27 +250,11 @@ details.notes[open] summary::before{content:"\25BE  "}
           <label for="fNote">Notes (optional)</label>
           <textarea id="fNote" maxlength="1000" rows="2" placeholder="e.g. Prefers texts before 5pm"></textarea>
         </div>
-        <label class="check" for="fRec"><input type="checkbox" id="fRec">
-          <span>Recurring<small>After the 2nd call, keep calling every <span class="repN">21</span> days. Leave unchecked for one-time (2 calls only).</small></span>
-        </label>
         <div class="preview" id="preview"></div>
         <p class="err" id="formErr" hidden></p>
         <button class="primary" type="submit">Add client</button>
       </form>
-      <p class="hint" style="margin-top:14px"><b>One-time:</b> 2 calls. When the 2nd is marked done you're asked if they converted to recurring. If not, you note why and they stay under One-time clients.<br><b>Recurring:</b> after the 2nd call, a call every <span class="repN">21</span> days after the last one is made, plus reorders in the To order tab.</p>
-      <div style="margin-top:12px">
-        <label for="repDays">Days between recurring calls</label>
-        <input id="repDays" type="number" min="1" max="365" inputmode="numeric" value="21" style="max-width:110px">
-      </div>
-      <div style="margin-top:14px">
-        <label>Reorder recurring clients every · days</label>
-        <div class="settings-grid">
-          <div><label for="roHrt" style="text-transform:none;letter-spacing:0">HRT</label><input id="roHrt" data-ro="hrt" type="number" min="1" max="365" inputmode="numeric"></div>
-          <div><label for="roTrt" style="text-transform:none;letter-spacing:0">TRT</label><input id="roTrt" data-ro="trt" type="number" min="1" max="365" inputmode="numeric"></div>
-          <div><label for="roMwl" style="text-transform:none;letter-spacing:0">MWL</label><input id="roMwl" data-ro="mwl" type="number" min="1" max="365" inputmode="numeric"></div>
-        </div>
-        <p class="hint">Peptides reorder with every recurring call.</p>
-      </div>
+      <p class="hint" style="margin-top:14px"><b>Calls:</b> one set per client, covering everything they're on. After the 2nd call, every 21 days while anything is recurring.<br><b>One-time products:</b> after the 2nd call you're asked if they converted to recurring.<br><b>Invoices:</b> on the paid day. Peptides and MWL monthly, HRT and TRT every 2 months.</p>
     </aside>
 
     <main>
@@ -265,7 +266,7 @@ details.notes[open] summary::before{content:"\25BE  "}
         <button class="tab" role="tab" data-tab="clients" aria-selected="false">Clients<span class="n" id="nClients">0</span></button>
       </div>
       <div class="toolbar" id="toolbar" hidden>
-        <div class="grow"><label for="search">Search</label><input id="search" type="search" placeholder="Name, phone or note"></div>
+        <div class="grow"><label for="search">Search</label><input id="search" type="search" placeholder="Name, phone, product or note"></div>
         <div><label>Section</label><div class="segbar" id="sections" role="group" aria-label="Client section">
           <button type="button" data-sec="recurring" aria-pressed="true">Recurring<span class="n" id="nRec">0</span></button>
           <button type="button" data-sec="onetime" aria-pressed="false">One-time<span class="n" id="nOne">0</span></button>
@@ -277,6 +278,11 @@ details.notes[open] summary::before{content:"\25BE  "}
   </div>
 </div>
 
+<datalist id="dl-peptides"><option value="KLOW"><option value="Wolverine"><option value="Fat Burner 2.0"><option value="BPC-157"><option value="TB-500"><option value="GHK-Cu"><option value="DSIP"><option value="NAD+"><option value="Tesamorelin"><option value="MOTS-c"></datalist>
+<datalist id="dl-hrt"><option value="Estradiol"><option value="Progesterone"><option value="Testosterone"><option value="DHEA"></datalist>
+<datalist id="dl-trt"><option value="Testosterone"><option value="HCG"><option value="Enclomiphene"><option value="Anastrozole"></datalist>
+<datalist id="dl-mwl"><option value="Semaglutide"><option value="Tirzepatide"><option value="B12"></datalist>
+
 <dialog id="confirmDlg">
   <h3 id="cfTitle"></h3>
   <p id="cfBody"></p>
@@ -287,7 +293,7 @@ details.notes[open] summary::before{content:"\25BE  "}
   <p class="hint" id="cvSub" style="margin:0"></p>
   <div id="cvStep1">
     <div class="choices"><button type="button" class="primary" id="cvYes">Yes</button><button type="button" id="cvNo">No</button></div>
-    <p class="hint" style="margin:0"><b>No</b> moves them to One-time clients with the reason why. <button type="button" class="small ghost" id="cvLater" style="padding:2px 4px">Decide later</button> <button type="button" class="small ghost" id="cvUndo" style="padding:2px 4px" hidden>Oops, not called yet</button></p>
+    <p class="hint" style="margin:0"><b>No</b> keeps it as one-time with the reason why. <button type="button" class="small ghost" id="cvLater" style="padding:2px 4px">Decide later</button> <button type="button" class="small ghost" id="cvUndo" style="padding:2px 4px" hidden>Oops, not called yet</button></p>
   </div>
   <form id="cvStep3" hidden novalidate>
     <div><label for="cvReason">Why didn't they convert?</label>
@@ -298,11 +304,15 @@ details.notes[open] summary::before{content:"\25BE  "}
     <div class="actions" style="justify-content:flex-end"><button type="button" class="ghost" id="cvBack3">Back</button><button type="submit" class="primary">Save as one-time</button></div>
   </form>
   <form id="cvStep2" hidden novalidate>
-    <div><label for="cvProto">Protocol they're on now</label>
-      <select id="cvProto"><option value="peptides">Peptides</option><option value="hrt">HRT</option><option value="trt">TRT</option><option value="mwl">MWL</option></select>
-      <p class="hint" id="cvSwitch">Same protocol = continued. Pick a different one if they switched.</p></div>
+    <div class="row2">
+      <div><label for="cvProto">Protocol now</label>
+        <select id="cvProto"><option value="peptides">Peptides</option><option value="hrt">HRT</option><option value="trt">TRT</option><option value="mwl">MWL</option></select></div>
+      <div><label for="cvProd">Product</label><input id="cvProd" maxlength="60" list="dl-peptides"></div>
+    </div>
+    <div><label for="cvSupply">Supply lasts · days</label><input id="cvSupply" type="number" min="1" max="365" inputmode="numeric" style="max-width:110px"></div>
+    <p class="hint" id="cvSwitch" style="margin:0"></p>
     <div><label for="cvWhat">What did they do?</label>
-      <textarea id="cvWhat" maxlength="500" rows="3" placeholder="e.g. Continuing KLOW monthly, or switched to Tirzepatide 2.5mg"></textarea></div>
+      <textarea id="cvWhat" maxlength="500" rows="2" placeholder="e.g. Continuing KLOW monthly, or switched to Tirzepatide 2.5mg"></textarea></div>
     <label class="check" for="cvOrderNow"><input type="checkbox" id="cvOrderNow" checked><span>Order their next round now<small>Adds a reorder due today to the To order tab.</small></span></label>
     <p class="err" id="cvErr" hidden></p>
     <p class="hint" id="cvNext" style="margin:0"></p>
@@ -310,14 +320,20 @@ details.notes[open] summary::before{content:"\25BE  "}
   </form>
 </dialog>
 <div class="toast" id="toast" hidden><span id="toastMsg"></span><button type="button" id="toastBtn" hidden></button></div>
-
 <script>
-const KEY="relive-followups-v1";
+/* =====================================================================
+   Relive follow-up tracker — clients with one or more products
+   client: { id, name, phone, start (paid date), delivered, d1, d2, active,
+             calls:[{id,due,doneAt,auto}], notes:[], items:[item], v:2 }
+   item:   { id, protocol, product, supply, recurring, reorders:[{id,due,doneAt}],
+             billedThrough, charges:[], convertedAt, notConverted:{reason,detail,at} }
+   ===================================================================== */
 const PROTO={peptides:"Peptides",hrt:"HRT",trt:"TRT",mwl:"MWL"};
+const REPEAT=21, LEAD=7;            // calls every 21 days after the 2nd; reorder 7 days before a product runs out
 const $=id=>document.getElementById(id);
-let demo=false, realClients=[], AUTO_DEMO=false;
 const noteDrafts={}, openNotes=new Set();
-let clients=[], settings={repeat:21,reorder:{hrt:49,trt:49,mwl:21},reorderV:2}, tab="due", search="", show="recurring", editing=null;
+let clients=[], settings={repeat:REPEAT}, tab="due", search="", show="recurring", editing=null;
+let undoTarget=null, deliverOpen=null, pendingDel=null;
 
 /* ---------- dates (local YYYY-MM-DD) ---------- */
 function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
@@ -326,6 +342,9 @@ function diff(a,b){ const p=s=>{const [y,m,d]=s.split("-").map(Number);return Da
 function fmt(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}); }
 function fmtS(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
 const isDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||"");
+const maxDate=(a,b)=>a>b?a:b;
+function addMonthsAnchor(s,n,day){ const [y,m]=s.split("-").map(Number); const t=new Date(Date.UTC(y,m-1+n,1)); const dim=new Date(Date.UTC(t.getUTCFullYear(),t.getUTCMonth()+1,0)).getUTCDate(); t.setUTCDate(Math.min(day,dim)); return t.toISOString().slice(0,10); }
+function ordinal(n){ const v=n%100; return n+(v>=11&&v<=13?"th":({1:"st",2:"nd",3:"rd"}[n%10]||"th")); }
 
 /* ---------- helpers ---------- */
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -338,21 +357,150 @@ function fmtPhone(v){ const d=String(v||"").replace(/\D/g,""); const t=d.length=
 function tel(v){ return "tel:"+String(v||"").replace(/[^\d+]/g,""); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function intIn(v,lo,hi){ const n=Number(String(v).trim()); return String(v).trim()!=="" && Number.isInteger(n) && n>=lo && n<=hi ? n : null; }
+function listJoin(a){ return a.length<=1?(a[0]||""):a.slice(0,-1).join(", ")+" and "+a[a.length-1]; }
+const find=id=>clients.find(c=>c.id===id);
+
+/* ---------- products ---------- */
+function defaultSupply(protocol,product){
+  const p=String(product||"").toLowerCase();
+  if(/progesterone/.test(p)) return 60;
+  if(/estradiol|estrogen|testosterone|\btest\b|hcg|enclomiphene|anastrozole|dhea/.test(p)) return 56;
+  return (protocol==="hrt"||protocol==="trt") ? 56 : 28;
+}
+function itemsOf(c){ if(!Array.isArray(c.items)) c.items=[]; return c.items; }
+function itemName(it){ return it.product ? it.product : PROTO[it.protocol]; }
+function itemLabel(it){ return it.product ? `${it.product} (${PROTO[it.protocol]})` : PROTO[it.protocol]; }
+function recurringItems(c){ return itemsOf(c).filter(it=>it.recurring); }
+function anyRecurring(c){ return itemsOf(c).some(it=>it.recurring); }
+function pendingItems(c){ return itemsOf(c).filter(it=>!it.recurring && !it.notConverted); }
+function protocolsOf(c){ return [...new Set(itemsOf(c).map(it=>it.protocol))]; }
+function chipsFor(c){ return protocolsOf(c).map(chip).join(""); }
+function chip(p){ return `<span class="chip ${esc(p)}">${esc(PROTO[p]||p)}</span>`; }
+function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,365)||defaultSupply(o.protocol,o.product), recurring:!!o.recurring, reorders:[], charges:[]}; }
+
+/* ---------- reorders: 7 days before each product runs out ---------- */
+function openReorder(it){ return (it.reorders||[]).find(r=>!r.doneAt)||null; }
+function lastOrdered(it){ const d=(it.reorders||[]).filter(r=>r.doneAt).map(r=>r.doneAt).sort(); return d[d.length-1]||""; }
+function firstReorderDate(c,it){
+  // after an order: the next one is one supply later; otherwise 7 days before the first supply runs out
+  const lo=lastOrdered(it);
+  if(lo) return addDays(lo,it.supply);
+  return maxDate(addDays(c.delivered,Math.max(it.supply-LEAD,0)), today());
+}
+function ensureReorder(c,it,due){
+  if(!c.active || !it.recurring || !isDate(c.delivered) || openReorder(it)) return null;
+  if(!Array.isArray(it.reorders)) it.reorders=[];
+  const r={id:uid(), due:due||firstReorderDate(c,it), doneAt:null}; it.reorders.push(r); return r;
+}
+// reorders that land within 7 days of each other are placed as one order (on the earliest date)
+function reorderGroups(c){
+  if(!c.active) return [];
+  const open=recurringItems(c).map(it=>({it,r:openReorder(it)})).filter(x=>x.r).sort((a,b)=>a.r.due.localeCompare(b.r.due));
+  const groups=[];
+  for(const x of open){ const g=groups[groups.length-1]; if(g && diff(x.r.due,g.due)<=LEAD) g.items.push(x); else groups.push({c,due:x.r.due,items:[x]}); }
+  return groups;
+}
+function nextReorderGroup(c){ return reorderGroups(c)[0]||null; }
+function markOrdered(c,group){
+  const t=today(), made=[];
+  for(const {it,r} of group.items){ r.doneAt=t; const nx=ensureReorder(c,it); made.push([r,nx,it]); }
+  return ()=>{ for(const [r,nx,it] of made){ r.doneAt=null; if(nx) it.reorders=it.reorders.filter(x=>x!==nx); } };
+}
+
+/* ---------- invoices: on the paid day; Peptides/MWL monthly, HRT/TRT every 2 months ---------- */
+function billMonths(p){ return (p==="hrt"||p==="trt") ? 2 : 1; }
+function nextInvoice(c,it){
+  if(!c.active || !it.recurring || !isDate(c.start)) return "";
+  const day=Number(c.start.slice(8)), m=billMonths(it.protocol), after=isDate(it.billedThrough)?it.billedThrough:c.start;
+  let k=1, d=addMonthsAnchor(c.start,m,day);
+  while(d<=after && k<1200){ k++; d=addMonthsAnchor(c.start,m*k,day); }
+  return d;
+}
+function startBilling(it,c){ const y=addDays(today(),-1); it.billedThrough=maxDate(c.start,y); }
+function invoiceGroups(c){
+  const by={};
+  for(const it of recurringItems(c)){ const d=nextInvoice(c,it); if(d) (by[d]=by[d]||[]).push(it); }
+  return Object.keys(by).sort().map(d=>({c,date:d,items:by[d]}));
+}
+function nextInvoiceGroup(c){ return invoiceGroups(c)[0]||null; }
+function payDay(c){ return ordinal(Number(c.start.slice(8))); }
+
+/* ---------- calls: one set per client ---------- */
+function callLabel(i){ return i===0?"1st call":i===1?"2nd call":"Recurring call #"+(i-1); }
+function openCall(c){ return (c.calls||[]).find(x=>!x.doneAt) || null; }
+function startCalls(c){
+  if(!isDate(c.delivered) || (c.calls||[]).length) return;
+  c.calls=[{id:uid(),due:addDays(c.delivered,c.d1),doneAt:null},{id:uid(),due:addDays(c.delivered,c.d2),doneAt:null}];
+  for(const it of recurringItems(c)){ ensureReorder(c,it); }
+}
+// after a call is made: keep calling every 21 days while anything is recurring
+function bookNextCall(c){
+  if(!c.active || openCall(c) || (c.calls||[]).length<2 || !anyRecurring(c)) return null;
+  const last=c.calls[c.calls.length-1];
+  const call={id:uid(), due:maxDate(addDays(last.doneAt,REPEAT),today()), doneAt:null, auto:true};
+  c.calls.push(call); return call;
+}
+function undoCall(c,li){
+  const nxt=c.calls[li+1];
+  if(nxt && nxt.auto && !nxt.doneAt) c.calls.splice(li+1,1);
+  c.calls[li].doneAt=null;
+}
+function waiting(c){ return c.active && !isDate(c.delivered); }
+function firstTwoDone(c){ return (c.calls||[]).length>=2 && c.calls[0].doneAt && c.calls[1].doneAt; }
+function needsDecision(c){ return c.active && firstTwoDone(c) && pendingItems(c).length>0; }
+function sectionOf(c){ return !c.active ? "stopped" : anyRecurring(c) ? "recurring" : "onetime"; }
+function status(c){
+  if(!c.active) return "stopped";
+  if(waiting(c)) return "waiting";
+  if(needsDecision(c)) return "decide";
+  if(!anyRecurring(c) && itemsOf(c).length && itemsOf(c).every(it=>it.notConverted)) return "noconvert";
+  if(openCall(c)) return "active";
+  return "finished";
+}
+
+/* ---------- bring older records up to date ---------- */
+function migrate(c){
+  if(!Array.isArray(c.calls)) c.calls=[];
+  if(!Array.isArray(c.notes)) c.notes=[];
+  if(!("delivered" in c)) c.delivered = c.calls.length ? c.start : null;
+  if(c.v===2) return;
+  // one protocol per client -> a list of products
+  const p=c.protocol in PROTO ? c.protocol : "peptides";
+  const it={id:uid(), protocol:p, product:"", supply:defaultSupply(p,""), recurring:!!c.recurring,
+    reorders:(c.reorders||[]).map(r=>({id:r.id||uid(), due:r.due, doneAt:r.doneAt||null})), charges:Array.isArray(c.charges)?c.charges:[]};
+  if(c.convertedAt) it.convertedAt=c.convertedAt;
+  if(c.notConverted) it.notConverted=c.notConverted;
+  if(it.recurring) it.billedThrough = isDate(c.billedThrough) ? c.billedThrough : maxDate(c.start,addDays(today(),-1));
+  // keep only one open reorder per product
+  let seen=false; it.reorders=it.reorders.filter(r=>{ if(r.doneAt) return true; if(seen) return false; seen=true; return true; });
+  if(!c.recurring) c.calls=c.calls.filter((k,i)=>i<2||k.doneAt);
+  // calls after the 2nd are 21 days after the last call made
+  c.calls.forEach((k,i)=>{ const prev=c.calls[i-1]; if(i>=2 && !k.doneAt && k.auto && prev && prev.doneAt) k.due=addDays(prev.doneAt,REPEAT); });
+  c.items=[it];
+  for(const k of ["protocol","recurring","reorders","charges","convertedAt","notConverted","billedThrough","billV","rep21"]) delete c[k];
+  c.v=2;
+  if(it.recurring) ensureReorder(c,it);
+}
+// a few plain fields so the Google Sheet's readable columns stay filled in
+function stamp(c){
+  const its=itemsOf(c);
+  c.protocol=its.map(it=>itemLabel(it)).join(" + ");
+  c.recurring=anyRecurring(c);
+  if(!c.recurring && its.length && its.every(it=>it.notConverted)) c.notConverted=its[0].notConverted; else delete c.notConverted;
+}
 
 /* ---------- storage: Google Sheet via Apps Script ---------- */
 const hasGS = typeof google!=="undefined" && google.script && google.script.run;
 let synced={}, syncedSettings="", inFlight=false, again=false, loadedOnce=false, retryT=null;
-const syncSettings=st=>JSON.stringify({repeat:st.repeat,reorder:st.reorder,reorderV:st.reorderV});
+const syncSettings=st=>JSON.stringify({repeat:REPEAT});
 function setSync(state,msg){ const el=$("syncStatus"); if(!el) return; el.dataset.state=state; el.textContent=msg; }
 function gs(fn,arg){ return new Promise((res,rej)=>{ if(!hasGS) return rej(new Error("offline")); const run=google.script.run.withSuccessHandler(res).withFailureHandler(rej); arg===undefined?run[fn]():run[fn](arg); }); }
 function applyRemote(json){
-  const d=JSON.parse(json), x=d.settings||{};
+  const d=JSON.parse(json);
   clients=Array.isArray(d.clients)?d.clients:[];
-  settings={...settings, repeat:intIn(x.repeat,1,365)||settings.repeat, reorder:{...settings.reorder,...(x.reorder||{})}, reorderV:x.reorderV||1};
-  synced=Object.fromEntries(clients.map(c=>[c.id,JSON.stringify(c)])); syncedSettings=syncSettings({...settings,reorderV:x.reorderV});
-  // bring older records up to date; anything that changes here is saved right after
-  const resched=upgradeReorderSettings(settings, x.reorderV);
-  for(const c of clients){ if(!c.recurring && Array.isArray(c.calls)) c.calls=c.calls.filter((k,i)=>i<2||k.doneAt); migrateReorders(c); if(resched) rescheduleOpen(c); migrateBilling(c); }
+  synced=Object.fromEntries(clients.map(c=>[c.id,JSON.stringify(c)]));
+  syncedSettings=JSON.stringify(d.settings&&d.settings.repeat===REPEAT?{repeat:REPEAT}:{repeat:(d.settings||{}).repeat});
+  clients.forEach(migrate);
 }
 async function load(){
   if(!hasGS){ loadedOnce=true; setSync("err","Not connected. Open the tracker from its Google link"); return; }
@@ -361,6 +509,7 @@ async function load(){
   catch(e){ setSync("err","Couldn't load. Retrying…"); await new Promise(r=>setTimeout(r,5000)); return load(); }
 }
 function changes(){
+  clients.forEach(stamp);
   const upserts=[], cur={};
   for(const c of clients){ const j=JSON.stringify(c); cur[c.id]=j; if(synced[c.id]!==j) upserts.push(c); }
   const deleted=Object.keys(synced).filter(id=>!(id in cur)), st=syncSettings(settings);
@@ -368,7 +517,7 @@ function changes(){
 }
 function hasChanges(){ const ch=changes(); return !!(ch.upserts.length||ch.deleted.length||ch.settings); }
 function save(){
-  if(demo || !loadedOnce || !hasGS) return;
+  if(!loadedOnce || !hasGS) return;
   if(inFlight){ again=true; return; }
   const ch=changes();
   if(!ch.upserts.length && !ch.deleted.length && !ch.settings){ setSync("ok","Saved"); return; }
@@ -379,363 +528,344 @@ function save(){
       inFlight=false; if(again||hasChanges()){ again=false; save(); } else setSync("ok","Saved"); })
     .catch(()=>{ inFlight=false; again=false; setSync("err","Not saved yet. Retrying…"); clearTimeout(retryT); retryT=setTimeout(save,5000); });
 }
-// pull other people's / other devices' changes, but never while you're in the middle of something
+// pull changes made on other laptops, but never while you're in the middle of something
 function busyHere(){
   const a=document.activeElement;
-  return !!(editing || $("convDlg").open || $("confirmDlg").open || !$("toast").hidden || (a && a!==document.body && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && (a.closest("#list")||a.closest("dialog"))));
+  return !!(editing || deliverOpen || $("convDlg").open || $("confirmDlg").open || !$("toast").hidden || (a && a!==document.body && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && (a.closest("#list")||a.closest("dialog"))));
 }
 async function refresh(){
-  if(demo || !hasGS || !loadedOnce || inFlight || busyHere()) return;
+  if(!hasGS || !loadedOnce || inFlight || busyHere()) return;
   if(hasChanges()) return save();
   try{
     const json=await gs("loadAll");
-    if(demo || inFlight || busyHere() || hasChanges()) return;
+    if(inFlight || busyHere() || hasChanges()) return;
     const before=JSON.stringify(clients); applyRemote(json);
-    if(JSON.stringify(clients)!==before){ render(); updatePreview(); }
+    if(JSON.stringify(clients)!==before){ render(); }
     save();
   }catch(e){}
-}
-
-/* ---------- call logic ---------- */
-// calls[0] = 1st call, calls[1] = 2nd call, calls[2] = follow-up after 2nd, calls[3+] = recurring
-function callLabel(i){ return i===0?"1st call":i===1?"2nd call":"Recurring call #"+(i-1); }
-function openCall(c){ return c.calls.find(x=>!x.doneAt) || null; }
-function nextAfterDone(c){
-  // called after a call is marked done: book the next one if the rules say so
-  if(!c.active || openCall(c)) return null;
-  const n=c.calls.length, last=c.calls[n-1];
-  if(n<2) return null;
-  if(c.recurring){
-    const call={id:uid(), due:addDays(last.doneAt, settings.repeat), doneAt:null, auto:true};
-    c.calls.push(call);
-    if(c.protocol==="peptides") addReorder(c,call.due,call.id);
-    return call;
-  }
-  return null;
-}
-/* ---------- invoices ---------- */
-// recurring clients are billed on the day of the month they started:
-// peptides + MWL every month, HRT + TRT every 2 months
-function billMonths(p){ return (p==="hrt"||p==="trt") ? 2 : 1; }
-function ordinal(n){ const v=n%100; return n+(v>=11&&v<=13?"th":({1:"st",2:"nd",3:"rd"}[n%10]||"th")); }
-function billRule(c){ const m=billMonths(c.protocol); return `${m===2?"every 2 months":"every month"} on the ${ordinal(Number(c.start.slice(8)))}`; }
-function addMonthsAnchor(s,n,day){ const [y,m]=s.split("-").map(Number); const t=new Date(Date.UTC(y,m-1+n,1)); const dim=new Date(Date.UTC(t.getUTCFullYear(),t.getUTCMonth()+1,0)).getUTCDate(); t.setUTCDate(Math.min(day,dim)); return t.toISOString().slice(0,10); }
-function invoiceInfo(c){
-  if(!c || !c.recurring || !c.active || !isDate(c.start)) return null;
-  const day=Number(c.start.slice(8)), m=billMonths(c.protocol), after=isDate(c.billedThrough)?c.billedThrough:c.start;
-  let k=1, d=addMonthsAnchor(c.start,m,day);
-  while(d<=after && k<1200){ k++; d=addMonthsAnchor(c.start,m*k,day); }
-  return {next:d, months:m};
-}
-function hasInvoice(c){ return !!invoiceInfo(c); }
-function migrateBilling(c){
-  if(c.billV) return;
-  delete c.invoice; c.billV=1;
-  const lastCharge=(c.charges||[]).map(x=>x.date).sort().slice(-1)[0], y=addDays(today(),-1);
-  c.billedThrough = lastCharge || (c.start>y ? c.start : y);
-}
-function invoiceLine(c,t){
-  const i=invoiceInfo(c); if(!i) return "";
-  const d=diff(i.next,t);
-  return `<div class="reorder-next invoice-next"><span>Next invoice</span><b>${esc(fmt(i.next))}</b><span class="hint" style="margin:0">${d<0?`${-d} day${d===-1?"":"s"} ago, not marked charged`:d===0?"charges today":`in ${d} day${d===1?"":"s"}`} · ${esc(billRule(c))}</span></div>`;
-}
-function startBill(c,t,long){
-  const st=`<span>Started <span class="mono">${esc(long?fmt(c.start):fmtS(c.start))}</span></span>`;
-  if(!isDate(c.start)) return st;
-  const day=ordinal(Number(c.start.slice(8)));
-  const i=invoiceInfo(c);
-  if(!i) return st+`<span class="billmeta soft">Invoices on the ${day}${c.recurring?"":" if they go recurring"}</span>`;
-  const d=diff(i.next,t), when=d<0?`${-d} day${d===-1?"":"s"} overdue`:d===0?"today":`in ${d} day${d===1?"":"s"}`;
-  return st+`<span class="billmeta${d<0?" late":""}">Invoices on the ${day}${i.months===2?", every 2 months":""} · next <span class="mono">${esc(fmtS(i.next))}</span> (${when})</span>`;
-}
-function allInvoices(){
-  return clients.filter(c=>hasInvoice(c)).map(c=>({c,next:invoiceInfo(c).next})).sort((a,b)=>a.next.localeCompare(b.next)||a.c.name.localeCompare(b.c.name));
-}
-function invoiceCard({c,next},t){
-  const last=(c.charges||[]).slice(-1)[0], nr=nextReorder(c);
-  return `<article class="card${next<t?" isLate":""}">
-    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chip(c.protocol)}<span>Invoice</span></div>${dueChip(next,t)}</div>
-    <div class="meta">${startBill(c,t)}${last?`<span>Last charged <span class="mono">${esc(fmtS(last.date))}</span></span>`:""}</div>
-    ${phoneHtml(c)}
-    ${nr?`<div class="reorder-next"><span>Next reorder</span><b>${esc(fmt(nr.due))}</b><span class="hint" style="margin:0">${(()=>{ const d=diff(nr.due,t); return d<=0?"due":`in ${d} day${d===1?"":"s"}`; })()}${nr.est?" (est.)":""}</span></div>`:""}
-    <div class="actions">
-      <button type="button" class="small primary" data-act="charged" data-c="${esc(c.id)}">Mark charged</button>
-      <button type="button" class="small ghost" data-act="edit" data-c="${esc(c.id)}">Edit</button>
-      <button type="button" class="small ghost" data-act="del" data-c="${esc(c.id)}">Delete</button>
-    </div>
-  </article>`;
-}
-
-/* ---------- reorders ---------- */
-// earlier versions defaulted to HRT/TRT 60 and MWL 30 days; move untouched values to 49 / 49 / 21
-function upgradeReorderSettings(st, ver){
-  if(ver===2) return false;
-  const old={hrt:60,trt:60,mwl:30}, nu={hrt:49,trt:49,mwl:21};
-  for(const k in old) if(Number(st.reorder[k])===old[k]) st.reorder[k]=nu[k];
-  st.reorderV=2; return true;
-}
-function rescheduleOpen(c){
-  if(!c.recurring || c.protocol==="peptides") return;
-  const anchor=lastOrdered(c)||c.convertedAt||c.start;
-  for(const r of reordersOf(c)) if(!r.doneAt && r.due!==c.convertedAt) r.due=addDays(anchor,reorderDays(c.protocol));
-}
-// next reorder date for a recurring client (estimated for peptide clients still on their first 2 calls)
-function nextReorder(c){
-  if(!c.recurring || !c.active) return null;
-  const o=openReorders(c).sort((a,b)=>a.due.localeCompare(b.due))[0];
-  if(o) return {due:o.due, r:o, est:false};
-  if(c.protocol==="peptides"){
-    const oc=openCall(c); if(!oc) return null;
-    const i=c.calls.indexOf(oc);
-    return {due: i>=2 ? oc.due : addDays(c.calls[1].due, settings.repeat), est:true};
-  }
-  return null;
-}
-function reordersOf(c){ if(!Array.isArray(c.reorders)) c.reorders=[]; return c.reorders; }
-function reorderDays(p){ return p==="peptides" ? null : (settings.reorder[p]||30); }
-function reorderRule(p){ return p==="peptides" ? `with every ${settings.repeat}-day call` : `every ${reorderDays(p)} days`; }
-function addReorder(c,due,callId){ const r={id:uid(),due,doneAt:null,auto:true}; if(callId) r.callId=callId; reordersOf(c).push(r); return r; }
-function openReorders(c){ return reordersOf(c).filter(r=>!r.doneAt); }
-function lastOrdered(c){ const d=reordersOf(c).filter(r=>r.doneAt).map(r=>r.doneAt).sort(); return d[d.length-1]||""; }
-// non-peptide recurring clients always have one open reorder on their cadence
-function ensureReorder(c,anchor){
-  if(!c.active || !c.recurring || c.protocol==="peptides" || openReorders(c).length) return null;
-  let due=addDays(anchor,reorderDays(c.protocol)); return addReorder(c,due);
-}
-function migrateReorders(c){
-  reordersOf(c);
-  if(!c.recurring) return;
-  if(c.protocol==="peptides"){ c.calls.forEach((k,i)=>{ if(i>=2 && !k.doneAt && !c.reorders.some(r=>r.callId===k.id)) addReorder(c,k.due,k.id); }); }
-  else ensureReorder(c, lastOrdered(c)||c.convertedAt||c.start);
-}
-function needsDecision(c){ return c.active && !c.recurring && !c.notConverted && c.calls.length>=2 && c.calls.every(k=>k.doneAt); }
-function sectionOf(c){ return !c.active ? "stopped" : c.recurring ? "recurring" : "onetime"; }
-function status(c){
-  if(!c.active) return "stopped";
-  if(needsDecision(c)) return "decide";
-  if(!c.recurring && c.notConverted) return "noconvert";
-  if(openCall(c)) return "active";
-  return "finished";
 }
 
 /* ---------- render ---------- */
 function allOpen(){
   const out=[];
-  for(const c of clients){ if(!c.active) continue; c.calls.forEach((k,i)=>{ if(!k.doneAt) out.push({c,k,i}); }); }
+  for(const c of clients){ if(!c.active) continue; const k=openCall(c); if(k) out.push({c,k,i:c.calls.indexOf(k)}); }
   return out.sort((a,b)=>a.k.due.localeCompare(b.k.due)||a.c.name.localeCompare(b.c.name));
 }
+function allReorderGroups(){ return clients.flatMap(reorderGroups).sort((a,b)=>a.due.localeCompare(b.due)||a.c.name.localeCompare(b.c.name)); }
+function allInvoiceGroups(){ return clients.flatMap(invoiceGroups).sort((a,b)=>a.date.localeCompare(b.date)||a.c.name.localeCompare(b.c.name)); }
 function render(){
   const t=today();
   $("todayLbl").textContent="Today: "+fmt(t);
-  document.querySelectorAll(".repN").forEach(e=>e.textContent=settings.repeat);
-  if(document.activeElement!==$("repDays")) $("repDays").value=settings.repeat;
-  document.querySelectorAll("[data-ro]").forEach(i=>{ if(document.activeElement!==i) i.value=settings.reorder[i.dataset.ro]; });
-  // one card per person: only their next call that hasn't been made
-  const open=allOpen().filter(x=>openCall(x.c)===x.k), due=open.filter(x=>x.k.due<=t), up=open.filter(x=>x.k.due>t);
-  const decide=clients.filter(needsDecision);
-  const ro=allReorders(), roNow=ro.filter(x=>x.r.due<=t);
-  $("nOrder").textContent=roNow.length;
-  const inv=allInvoices(), invNow=inv.filter(x=>x.next<=t);
-  $("nInv").textContent=invNow.length;
-  $("nDue").textContent=due.length+decide.length; $("nUp").textContent=up.length; $("nClients").textContent=clients.filter(c=>c.active).length;
+  const open=allOpen(), due=open.filter(x=>x.k.due<=t), up=open.filter(x=>x.k.due>t);
+  const decide=clients.filter(needsDecision), waitingList=clients.filter(waiting).sort((a,b)=>a.start.localeCompare(b.start));
+  const soonEnd=addDays(t,14);
+  const ro=allReorderGroups(), roNow=ro.filter(g=>g.due<=t), roSoon=ro.filter(g=>g.due>t && g.due<=soonEnd);
+  const inv=allInvoiceGroups(), invNow=inv.filter(g=>g.date<=t), invSoon=inv.filter(g=>g.date>t && g.date<=soonEnd);
+  $("nDue").textContent=due.length+decide.length+waitingList.length; $("nUp").textContent=up.length;
+  $("nOrder").textContent=roNow.length; $("nInv").textContent=invNow.length;
+  $("nClients").textContent=clients.filter(c=>c.active).length;
   $("toolbar").hidden = tab!=="clients";
   let h="";
   if(tab==="due"){
-    h = (due.length||decide.length) ? decide.map(decideCard).join("")+due.map(x=>callCard(x,t)).join("") : empty(clients.length?"No calls due today":"No clients yet", clients.length?"Check Upcoming to see who's next.":"Add a client on the left and their calls will show up here.");
-  } else if(tab==="invoices"){
-    const soonEnd=addDays(t,14), soon=inv.filter(x=>x.next>t && x.next<=soonEnd);
-    if(!invNow.length && !soon.length) h=empty("No invoices in the next 2 weeks","Recurring clients show up here when a charge is coming up. Every card also shows each client's next invoice next to their start date.");
-    else {
-      h+=`<div class="group-h">Charging now · ${invNow.length}</div>`+(invNow.length?invNow.map(x=>invoiceCard(x,t)).join(""):`<p class="hint">Nothing charges today.</p>`);
-      if(soon.length) h+=`<div class="group-h">Next 2 weeks · ${soon.length}</div>`+soon.map(x=>invoiceCard(x,t)).join("");
-    }
-  } else if(tab==="order"){
-    const soonEnd=addDays(t,14), soon=ro.filter(x=>x.r.due>t && x.r.due<=soonEnd);
-    if(!roNow.length && !soon.length) h=empty("Nothing to order in the next 2 weeks","Recurring clients show up here when a reorder is coming up. Every recurring card also shows the next reorder date.");
-    else {
-      h+=`<div class="group-h">Order now · ${roNow.length}</div>`+(roNow.length?roNow.map(x=>reorderCard(x,t)).join(""):`<p class="hint">Nothing needs ordering today.</p>`);
-      if(soon.length) h+=`<div class="group-h">Next 2 weeks · ${soon.length}</div>`+soon.map(x=>reorderCard(x,t)).join("");
-    }
+    h = (due.length||decide.length||waitingList.length) ? waitingList.map(c=>waitCard(c,t)).join("")+decide.map(c=>decideCard(c,t)).join("")+due.map(x=>callCard(x,t)).join("")
+      : empty(clients.length?"No calls due today":"No clients yet", clients.length?"Check Upcoming to see who's next.":"Add a client on the left and their calls will show up here.");
   } else if(tab==="upcoming"){
-    if(!up.length) h=empty("Nothing scheduled","Calls appear here once a client is added.");
+    if(!up.length) h=empty("Nothing scheduled","Calls appear here once a client's product is delivered.");
     else { let last=""; for(const x of up){ if(x.k.due!==last){ const n=diff(x.k.due,t); h+=`<div class="group-h">${esc(fmt(x.k.due))} <span class="mono">· in ${n} day${n===1?"":"s"}</span></div>`; last=x.k.due; } h+=callCard(x,t); } }
+  } else if(tab==="order"){
+    if(!roNow.length && !roSoon.length) h=empty("Nothing to order in the next 2 weeks","Each product shows up here 7 days before it runs out.");
+    else {
+      h+=`<div class="group-h">Order now · ${roNow.length}</div>`+(roNow.length?roNow.map(g=>reorderCard(g,t)).join(""):`<p class="hint">Nothing needs ordering today.</p>`);
+      if(roSoon.length) h+=`<div class="group-h">Next 2 weeks · ${roSoon.length}</div>`+roSoon.map(g=>reorderCard(g,t)).join("");
+    }
+  } else if(tab==="invoices"){
+    if(!invNow.length && !invSoon.length) h=empty("No invoices in the next 2 weeks","Recurring products are billed on the paid day: Peptides and MWL monthly, HRT and TRT every 2 months.");
+    else {
+      h+=`<div class="group-h">Charging now · ${invNow.length}</div>`+(invNow.length?invNow.map(g=>invoiceCard(g,t)).join(""):`<p class="hint">Nothing charges today.</p>`);
+      if(invSoon.length) h+=`<div class="group-h">Next 2 weeks · ${invSoon.length}</div>`+invSoon.map(g=>invoiceCard(g,t)).join("");
+    }
   } else {
     const q=search.trim().toLowerCase(), qd=q.replace(/\D/g,"");
     const secCount=k=>clients.filter(c=>sectionOf(c)===k).length;
     $("nRec").textContent=secCount("recurring"); $("nOne").textContent=secCount("onetime"); $("nStop").textContent=secCount("stopped");
     document.querySelectorAll("#sections button").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.sec===show)));
-    const rows=clients.filter(c=> sectionOf(c)===show && (!q || c.name.toLowerCase().includes(q) || notesOf(c).some(n=>n.text.toLowerCase().includes(q)) || (qd.length>=3 && String(c.phone||"").replace(/\D/g,"").includes(qd))))
+    const rows=clients.filter(c=> sectionOf(c)===show && (!q || c.name.toLowerCase().includes(q) || itemsOf(c).some(it=>itemLabel(it).toLowerCase().includes(q)) || notesOf(c).some(n=>n.text.toLowerCase().includes(q)) || (qd.length>=3 && String(c.phone||"").replace(/\D/g,"").includes(qd))))
       .sort((a,b)=>{ const A=openCall(a), B=openCall(b); return ((A&&A.due)||"9999").localeCompare((B&&B.due)||"9999")||a.name.localeCompare(b.name); });
-    const none={recurring:["No recurring clients yet","Clients show up here once they're set to recurring."],onetime:["No one-time clients","One-time clients show up here, including anyone who didn't convert and why."],stopped:["No stopped clients","Clients you stop calling show up here."]}[show];
+    const none={recurring:["No recurring clients yet","Clients show up here once something they're on is recurring."],onetime:["No one-time clients","One-time clients show up here, including anyone who didn't convert and why."],stopped:["No stopped clients","Clients you stop calling show up here."]}[show];
     if(!rows.length) h=empty(q?"No matches":none[0], q?"Try a different name, or check the other sections.":none[1]);
     else if(show==="onetime"){
-      const inProg=rows.filter(c=>!c.notConverted), lost=rows.filter(c=>c.notConverted).sort((a,b)=>(b.notConverted.at||"").localeCompare(a.notConverted.at||""));
+      const lost=rows.filter(c=>status(c)==="noconvert"), inProg=rows.filter(c=>status(c)!=="noconvert");
       if(inProg.length) h+=`<div class="group-h">In progress · ${inProg.length}</div>`+inProg.map(c=>clientCard(c,t)).join("");
       if(lost.length){
-        const tally={}; lost.forEach(c=>{ const k=c.notConverted.reason||"Other"; tally[k]=(tally[k]||0)+1; });
+        const tally={}; lost.forEach(c=>itemsOf(c).forEach(it=>{ if(it.notConverted){ const k=it.notConverted.reason||"Other"; tally[k]=(tally[k]||0)+1; } }));
         h+=`<div class="group-h">Didn't convert · ${lost.length}</div><div class="reasons">${Object.entries(tally).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<span class="chip late">${esc(k)} × ${n}</span>`).join("")}</div>`+lost.map(c=>clientCard(c,t)).join("");
       }
-    }
-    else h=rows.map(c=>clientCard(c,t)).join("");
+    } else h=rows.map(c=>clientCard(c,t)).join("");
   }
   $("list").innerHTML=h;
-  backupNudge();
-  if(!loadedOnce && !demo && hasGS) $("list").innerHTML=empty("Loading your clients…","Getting the latest list from your Google Sheet.");
-}
-function decideCard(c){
-  const last=c.calls[c.calls.length-1];
-  return `<article class="card decideCard">
-    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chip(c.protocol)}<span>Both calls done</span></div><span class="chip decide">Did they convert?</span></div>
-    <div class="meta">${startBill(c,today())}<span>2nd call made <span class="mono">${esc(fmtS(last.doneAt))}</span></span></div>
-    ${phoneHtml(c)}
-    <div class="actions"><button type="button" class="small primary" data-act="decide" data-c="${esc(c.id)}">Answer: converted to recurring?</button><button type="button" class="small ghost" data-act="edit" data-c="${esc(c.id)}">Edit</button><button type="button" class="small ghost" data-act="del" data-c="${esc(c.id)}">Delete</button></div>
-    ${notesBlock(c)}
-  </article>`;
-}
-function allReorders(){
-  const out=[];
-  for(const c of clients){ if(!c.active||!c.recurring) continue; for(const r of openReorders(c)) out.push({c,r}); }
-  return out.sort((a,b)=>a.r.due.localeCompare(b.r.due)||a.c.name.localeCompare(b.c.name));
-}
-function reorderCard({c,r},t){ /* shows next invoice too */
-  const tied=r.callId && c.calls.find(k=>k.id===r.callId);
-  const prev=reordersOf(c).filter(x=>x.doneAt).length;
-  return `<article class="card${r.due<t?" isLate":""}">
-    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chip(c.protocol)}<span>Reorder ${esc(PROTO[c.protocol])}</span></div>${dueChip(r.due,t)}</div>
-    <div class="meta">${startBill(c,t)}</div>
-    <div class="meta"><span>Reorders ${esc(reorderRule(c.protocol))}</span>${tied?`<span>Goes with their ${esc(callLabel(c.calls.indexOf(tied)))} on <span class="mono">${esc(fmtS(tied.due))}</span></span>`:""}<span>${prev} reorder${prev===1?"":"s"} placed${lastOrdered(c)?`, last <span class="mono">${esc(fmtS(lastOrdered(c)))}</span>`:""}</span></div>
-    ${phoneHtml(c)}
-    ${lastNote(c)}
-    <div class="actions">
-      <button type="button" class="small primary" data-act="ordered" data-c="${esc(c.id)}" data-r="${esc(r.id)}">Mark ordered</button>
-      <button type="button" class="small" data-act="roSnooze" data-c="${esc(c.id)}" data-r="${esc(r.id)}">Move to tomorrow</button>
-      <button type="button" class="small ghost" data-act="edit" data-c="${esc(c.id)}">Edit</button>
-      <button type="button" class="small ghost" data-act="del" data-c="${esc(c.id)}">Delete</button>
-    </div>
-  </article>`;
-}
-function reorderLine(c,k,t){
-  // on a call card: show any reorder due by this call's date
-  const by=k.due>t?k.due:t;
-  const due=openReorders(c).filter(r=>r.due<=by || r.callId===k.id);
-  if(!due.length){
-    const n=nextReorder(c); if(!n) return "";
-    const d=diff(n.due,t);
-    return `<div class="reorder-next"><span>Next reorder</span><b>${esc(fmt(n.due))}</b><span class="hint" style="margin:0">${d<=0?"due":`in ${d} day${d===1?"":"s"}`}${n.est?` · ${settings.repeat} days after the 2nd call`:` · every ${c.protocol==="peptides"?settings.repeat:reorderDays(c.protocol)} days`}</span></div>`;
-  }
-  const r=due[0];
-  return `<div class="reorder-line"><b>Reorder due</b><span>${esc(PROTO[c.protocol])} · ${r.callId===k.id?"with this call":esc(fmtS(r.due))}</span><button type="button" class="small" data-act="ordered" data-c="${esc(c.id)}" data-r="${esc(r.id)}">Mark ordered</button></div>`;
+  if(!loadedOnce && hasGS) $("list").innerHTML=empty("Loading your clients…","Getting the latest list from your Google Sheet.");
 }
 function empty(a,b){ return `<div class="empty"><strong>${esc(a)}</strong>${esc(b)}</div>`; }
-function chip(p){ return `<span class="chip ${esc(p)}">${esc(PROTO[p]||p)}</span>`; }
-function phoneHtml(c){ return c.phone ? `<span class="phone"><a href="${esc(tel(c.phone))}" target="_top">${esc(fmtPhone(c.phone))}</a><button type="button" class="small ghost" data-act="copy" data-v="${esc(fmtPhone(c.phone))}">Copy</button></span>` : `<span class="hint" style="margin:0">No phone on file</span>`; }
 function dueChip(due,t){
   const n=diff(t,due);
   if(n>0) return `<span class="chip late">${n} day${n===1?"":"s"} overdue</span>`;
   if(n===0) return `<span class="chip today">Due today</span>`;
   return `<span class="chip plain">In ${-n} day${n===-1?"":"s"} · ${esc(fmtS(due))}</span>`;
 }
-// "Next invoice Dec 19" for recurring clients; "If recurring, first invoice Dec 19" for one-time clients
+function phoneLink(c){ return c.phone?`<span class="phone"><a href="${esc(tel(c.phone))}" target="_top">${esc(fmtPhone(c.phone))}</a></span>`:""; }
+function moreMenu(c,k){
+  return `<details class="more"><summary class="small">More</summary><div class="menu">
+    ${k?`<button type="button" data-act="snooze" data-c="${esc(c.id)}" data-k="${esc(k.id)}">Move to tomorrow</button>`:""}
+    <button type="button" data-act="edit" data-c="${esc(c.id)}">Edit client</button>
+    <button type="button" data-act="del" data-c="${esc(c.id)}" class="danger-text">Delete client</button>
+  </div></details>`;
+}
+function notesBtn(c){ const n=notesOf(c).length; return `<button type="button" class="small ghost" data-act="notesToggle" data-c="${esc(c.id)}">Notes${n?` (${n})`:""}</button>`; }
+// "Next invoice Dec 19" for recurring products; "If recurring, first invoice Dec 19" while everything is one-time
 function invoiceHint(c,t){
   if(!isDate(c.start) || !c.active) return "";
-  const i=invoiceInfo(c);
-  if(i) return `<span class="inv-hint">Next invoice <b>${esc(fmtS(i.next))}</b>${i.months===2?" · every 2 months":""}</span>`;
-  if(c.recurring || c.notConverted) return "";
-  const y=addDays(t,-1), f=invoiceInfo({...c,recurring:true,active:true,billedThrough:c.start>y?c.start:y});
-  return f?`<span class="inv-hint">If recurring, first invoice <b>${esc(fmtS(f.next))}</b></span>`:"";
+  const g=nextInvoiceGroup(c);
+  if(g) return `<span class="inv-hint">Next invoice <b>${esc(fmtS(g.date))}</b>${protocolsOf(c).length>1?` · ${esc(listJoin([...new Set(g.items.map(it=>PROTO[it.protocol]))]))}`:""}</span>`;
+  if(!pendingItems(c).length) return "";
+  const y=addDays(t,-1), fake={...c,active:true}, it={...pendingItems(c)[0],recurring:true,billedThrough:maxDate(c.start,y)};
+  const d=nextInvoice(fake,it);
+  return d?`<span class="inv-hint">If recurring, first invoice <b>${esc(fmtS(d))}</b></span>`:"";
+}
+function reorderBar(c,byDate,t){
+  const g=reorderGroups(c).find(g=>g.due<=byDate);
+  if(!g) return "";
+  return `<div class="reorder-line"><b>Reorder due</b><span>${esc(listJoin(g.items.map(x=>itemName(x.it))))} · ${g.due<=t?"now":esc(fmtS(g.due))}</span><button type="button" class="small" data-act="ordered" data-c="${esc(c.id)}" data-g="${esc(g.due)}">Mark ordered</button></div>`;
 }
 function callCard({c,k,i},t){
-  // kept short on purpose: who, which call, when, phone, anything that needs doing now
-  const late=k.due<t, n=notesOf(c), inv=invoiceHint(c,t);
-  const due=openReorders(c).filter(r=>r.due<=(k.due>t?k.due:t) || r.callId===k.id)[0];
-  return `<article class="card slim${late?" isLate":""}">
+  const inv=invoiceHint(c,t);
+  return `<article class="card slim${k.due<t?" isLate":""}">
     <div class="card-head">
-      <div class="who"><strong>${esc(c.name)}</strong>${chip(c.protocol)}<span class="sub-label">${esc(callLabel(i))}</span></div>
+      <div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">${esc(callLabel(i))}</span></div>
       ${dueChip(k.due,t)}
     </div>
-    ${(c.phone||inv)?`<div class="phone-row">${c.phone?`<span class="phone"><a href="${esc(tel(c.phone))}" target="_top">${esc(fmtPhone(c.phone))}</a></span>`:""}${inv}</div>`:""}
-    ${due?`<div class="reorder-line"><b>Reorder due</b><span>${due.callId===k.id?"with this call":esc(fmtS(due.due))}</span><button type="button" class="small" data-act="ordered" data-c="${esc(c.id)}" data-r="${esc(due.id)}">Mark ordered</button></div>`:""}
+    ${(c.phone||inv)?`<div class="phone-row">${phoneLink(c)}${inv}</div>`:""}
+    ${reorderBar(c,maxDate(k.due,t),t)}
     <div class="actions">
       <button type="button" class="small primary" data-act="done" data-c="${esc(c.id)}" data-k="${esc(k.id)}">Mark called</button>
-      <button type="button" class="small ghost" data-act="notesToggle" data-c="${esc(c.id)}">Notes${n.length?` (${n.length})`:""}</button>
-      <details class="more"><summary class="small">More</summary><div class="menu">
-        <button type="button" data-act="snooze" data-c="${esc(c.id)}" data-k="${esc(k.id)}">Move to tomorrow</button>
-        <button type="button" data-act="edit" data-c="${esc(c.id)}">Edit client</button>
-        <button type="button" data-act="del" data-c="${esc(c.id)}" class="danger-text">Delete client</button>
-      </div></details>
+      ${notesBtn(c)}${moreMenu(c,k)}
     </div>
     ${openNotes.has(c.id)?notesBlock(c):""}
   </article>`;
 }
-function clientCard(c,t){
-  const st=status(c), oc=openCall(c);
-  const tl=c.calls.map((k,i)=> k.doneAt
-      ? `<span class="chip done">${esc(callLabel(i))} · called ${esc(fmtS(k.doneAt))}</span>`
-      : `<span class="chip ${k.due<t?"late":k.due===t?"today":"plain"}">${esc(callLabel(i))} · ${esc(fmtS(k.due))}</span>`).join("");
-  const stChip = st==="stopped" ? `<span class="chip late">Stopped</span>` : st==="decide" ? `<span class="chip decide">Did they convert?</span>` : st==="noconvert" ? `<span class="chip late">Didn't convert</span>` : st==="finished" ? `<span class="chip done">All calls done</span>` : "";
-  let countdown="";
-  if(oc){ const n=diff(oc.due,t); countdown=`<div style="text-align:right"><div class="days ${n<0?"late":n===0?"today":""}">${Math.abs(n)}</div><div class="hint" style="margin:0">${n<0?"days overdue":n===0?"due today":"days to next call"}</div></div>`; }
-  const lastDone=[...c.calls].reverse().find(k=>k.doneAt);
-  return `<article class="card${st==="stopped"?" stopped":""}">
+function waitCard(c,t){
+  const d=diff(t,c.start), late=d>5, open=deliverOpen===c.id;
+  return `<article class="card slim${late?" isLate":""}">
     <div class="card-head">
-      <div class="who"><strong>${esc(c.name)}</strong>${chip(c.protocol)}<span class="chip ${c.recurring?"rec":"plain"}">${c.recurring?"Recurring":"One-time"}</span>${stChip}</div>
-      ${countdown}
+      <div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">Waiting on delivery</span></div>
+      <span class="chip ${late?"late":"decide"}">Paid ${esc(fmtS(c.start))} · ${d===0?"today":`${d} day${d===1?"":"s"} ago`}</span>
     </div>
-    ${phoneHtml(c)}
-    <div class="meta">${startBill(c,t,true)}<span>Calls set for day ${c.d1} and day ${c.d2}${c.recurring?`, then every ${settings.repeat} days`:""}</span>${lastDone?`<span>Last called <span class="mono">${esc(fmtS(lastDone.doneAt))}</span></span>`:""}</div>
-    ${c.notConverted ? `<div class="whynot"><b>Why they didn't convert:</b> ${esc(c.notConverted.reason||"Other")}${c.notConverted.detail?` · ${esc(c.notConverted.detail)}`:""}${c.notConverted.at?` <span class="hint" style="display:inline">(${esc(fmtS(c.notConverted.at))})</span>`:""}</div>` : ""}
-    <div class="timeline">${tl}</div>
-    ${c.recurring ? (()=>{ const o=openReorders(c)[0], done=reordersOf(c).filter(r=>r.doneAt).slice(-3);
-      return `<div class="timeline">${done.map(r=>`<span class="chip done">Ordered ${esc(fmtS(r.doneAt))}</span>`).join("")}${(()=>{ const n=nextReorder(c); return n?`<span class="chip ${n.due<=t?"order":"plain"}">Next reorder · ${esc(fmtS(n.due))}${n.est?" (est.)":""}</span>`:""; })()}<span class="hint" style="margin:0;align-self:center">Reorders ${esc(reorderRule(c.protocol))}</span></div>`; })() : ""}
-    ${editing===c.id ? editPanel(c) : `<div class="actions">
-      <button type="button" class="small" data-act="edit" data-c="${esc(c.id)}">Edit</button>
-      ${lastDone?`<button type="button" class="small ghost" data-act="undo" data-c="${esc(c.id)}">Undo last call</button>`:""}
-      ${st==="decide"?`<button type="button" class="small primary" data-act="decide" data-c="${esc(c.id)}">Converted to recurring?</button>`:""}
-      ${st==="noconvert"?`<button type="button" class="small primary" data-act="cameBack" data-c="${esc(c.id)}">They came back: make recurring</button><button type="button" class="small" data-act="editWhy" data-c="${esc(c.id)}">Edit reason</button>`:""}
-      ${c.active?`<button type="button" class="small ghost" data-act="stop" data-c="${esc(c.id)}">Stop calls</button>`:`<button type="button" class="small" data-act="resume" data-c="${esc(c.id)}">Resume calls</button>`}
-      <button type="button" class="small ghost" data-act="del" data-c="${esc(c.id)}">Delete</button>
-    </div>`}
-    ${notesBlock(c)}
+    <div class="phone-row">${phoneLink(c)}<span class="inv-hint">${esc(listJoin(itemsOf(c).map(itemName)))}</span>${late?`<span class="inv-hint" style="color:var(--late)">Check on the shipment</span>`:""}</div>
+    ${open?`<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;background:var(--sunk);border-radius:8px;padding:10px">
+        <div><label for="delDate">Delivered on</label><input id="delDate" type="date" value="${esc(t)}" min="${esc(c.start)}" max="${esc(t)}"></div>
+        <button type="button" class="small primary" data-act="delSave" data-c="${esc(c.id)}">Save &amp; schedule calls</button>
+        <button type="button" class="small ghost" data-act="delCancel">Cancel</button></div>`
+      :`<div class="actions"><button type="button" class="small primary" data-act="delOpen" data-c="${esc(c.id)}">Mark delivered</button>${notesBtn(c)}${moreMenu(c)}</div>`}
+    ${openNotes.has(c.id)?notesBlock(c):""}
   </article>`;
 }
+function decideCard(c,t){
+  const last=c.calls[1];
+  return `<article class="card slim decideCard">
+    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">Both calls done</span></div><span class="chip decide">Did they convert?</span></div>
+    <div class="phone-row">${phoneLink(c)}<span class="inv-hint">One-time: ${esc(listJoin(pendingItems(c).map(itemName)))} · 2nd call ${esc(fmtS(last.doneAt))}</span></div>
+    <div class="actions"><button type="button" class="small primary" data-act="decide" data-c="${esc(c.id)}">Answer: converted to recurring?</button>${notesBtn(c)}${moreMenu(c)}</div>
+    ${openNotes.has(c.id)?notesBlock(c):""}
+  </article>`;
+}
+function reorderCard(g,t){
+  const c=g.c;
+  return `<article class="card slim${g.due<t?" isLate":""}">
+    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${[...new Set(g.items.map(x=>x.it.protocol))].map(chip).join("")}<span class="sub-label">Reorder</span></div>${dueChip(g.due,t)}</div>
+    <div class="items-sum">${g.items.map(({it,r})=>`<div class="it"><b>${esc(itemName(it))}</b><span class="hint">${it.supply}-day supply${r.due!==g.due?` · due ${esc(fmtS(r.due))}, ordering together`:""}</span></div>`).join("")}</div>
+    <div class="phone-row">${phoneLink(c)}</div>
+    <div class="actions">
+      <button type="button" class="small primary" data-act="ordered" data-c="${esc(c.id)}" data-g="${esc(g.due)}">Mark ordered</button>
+      <button type="button" class="small" data-act="roSnooze" data-c="${esc(c.id)}" data-g="${esc(g.due)}">Move to tomorrow</button>
+      ${moreMenu(c)}
+    </div>
+  </article>`;
+}
+function invoiceCard(g,t){
+  const c=g.c;
+  return `<article class="card slim${g.date<t?" isLate":""}">
+    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${[...new Set(g.items.map(it=>it.protocol))].map(chip).join("")}<span class="sub-label">Invoice</span></div>${dueChip(g.date,t)}</div>
+    <div class="items-sum">${g.items.map(it=>`<div class="it"><b>${esc(itemName(it))}</b><span class="hint">${billMonths(it.protocol)===2?"every 2 months":"monthly"} on the ${esc(payDay(c))}</span></div>`).join("")}</div>
+    <div class="phone-row">${phoneLink(c)}</div>
+    <div class="actions">
+      <button type="button" class="small primary" data-act="charged" data-c="${esc(c.id)}" data-g="${esc(g.date)}">Mark charged</button>
+      ${moreMenu(c)}
+    </div>
+  </article>`;
+}
+function clientCard(c,t){
+  const st=status(c), oc=openCall(c), lastDone=[...c.calls].reverse().find(k=>k.doneAt);
+  const stChip = st==="stopped" ? `<span class="chip late">Stopped</span>` : st==="waiting" ? `<span class="chip decide">Waiting on delivery</span>` : st==="decide" ? `<span class="chip decide">Did they convert?</span>` : st==="noconvert" ? `<span class="chip late">Didn't convert</span>` : st==="finished" ? `<span class="chip done">All calls done</span>` : "";
+  let countdown="";
+  if(oc){ const n=diff(oc.due,t); countdown=`<div style="text-align:right"><div class="days ${n<0?"late":n===0?"today":""}">${Math.abs(n)}</div><div class="hint" style="margin:0">${n<0?"days overdue":n===0?"due today":"days to next call"}</div></div>`; }
+  const tl=c.calls.map((k,i)=> k.doneAt ? `<span class="chip done">${esc(callLabel(i))} · called ${esc(fmtS(k.doneAt))}</span>` : `<span class="chip ${k.due<t?"late":k.due===t?"today":"plain"}">${esc(callLabel(i))} · ${esc(fmtS(k.due))}</span>`).join("");
+  const items=itemsOf(c).map(it=>{
+    const r=openReorder(it), inv=nextInvoice(c,it);
+    const bits=[`${it.supply}-day supply`];
+    if(it.recurring){ bits.push("Recurring"); if(r) bits.push(`reorder ${fmtS(r.due)}`); if(inv) bits.push(`invoice ${fmtS(inv)}`); }
+    else if(it.notConverted) bits.push(`Didn't convert: ${it.notConverted.reason}${it.notConverted.detail?` · ${it.notConverted.detail}`:""}`);
+    else bits.push("One-time");
+    return `<div class="it">${chip(it.protocol)}<b>${esc(it.product||PROTO[it.protocol])}</b><span class="hint">${esc(bits.join(" · "))}</span></div>`;
+  }).join("");
+  return `<article class="card${st==="stopped"?" stopped":""}">
+    <div class="card-head">
+      <div class="who"><strong>${esc(c.name)}</strong>${stChip}</div>
+      ${countdown}
+    </div>
+    <div class="phone-row">${phoneLink(c)}<span class="inv-hint">Paid ${esc(fmtS(c.start))} · invoices on the ${esc(payDay(c))}${isDate(c.delivered)?` · delivered ${esc(fmtS(c.delivered))}`:""}</span></div>
+    <div class="items-sum">${items}</div>
+    ${tl?`<div class="timeline">${tl}</div>`:""}
+    ${editing===c.id ? editPanel(c) : `<div class="actions">
+      ${st==="waiting"?`<button type="button" class="small primary" data-act="delOpen" data-c="${esc(c.id)}">Mark delivered</button>`:""}
+      ${st==="decide"?`<button type="button" class="small primary" data-act="decide" data-c="${esc(c.id)}">Converted to recurring?</button>`:""}
+      ${st==="noconvert"?`<button type="button" class="small primary" data-act="cameBack" data-c="${esc(c.id)}">They came back: make recurring</button>`:""}
+      <button type="button" class="small" data-act="edit" data-c="${esc(c.id)}">Edit</button>
+      ${lastDone?`<button type="button" class="small ghost" data-act="undo" data-c="${esc(c.id)}">Undo last call</button>`:""}
+      ${c.active?`<button type="button" class="small ghost" data-act="stop" data-c="${esc(c.id)}">Stop calls</button>`:`<button type="button" class="small" data-act="resume" data-c="${esc(c.id)}">Resume calls</button>`}
+      ${notesBtn(c)}
+      <button type="button" class="small ghost" data-act="del" data-c="${esc(c.id)}">Delete</button>
+    </div>`}
+    ${openNotes.has(c.id)?notesBlock(c):""}
+  </article>`;
+}
+
+/* ---------- product rows (add form + edit) ---------- */
+function itemRow(it,withReorder){
+  const r=withReorder && it.recurring ? openReorder(it) : null;
+  return `<div class="item-row" data-item="${esc(it.id||"")}">
+    <select data-f="protocol" aria-label="Protocol">${Object.entries(PROTO).map(([v,l])=>`<option value="${v}"${it.protocol===v?" selected":""}>${l}</option>`).join("")}</select>
+    <input data-f="product" list="dl-${esc(it.protocol)}" placeholder="Product, e.g. ${esc({peptides:"KLOW",hrt:"Estradiol",trt:"Testosterone",mwl:"Semaglutide"}[it.protocol])}" value="${esc(it.product||"")}" maxlength="60" aria-label="Product">
+    <label class="mini sup"><input data-f="supply" type="number" min="1" max="365" value="${esc(it.supply)}" aria-label="Supply in days"${it.supplyTouched?' data-touched="1"':""}>days</label>
+    <label class="mini rec"><input data-f="recurring" type="checkbox"${it.recurring?" checked":""}>Recurring</label>
+    <button type="button" class="x" data-act="rmItem" title="Remove this product" aria-label="Remove this product">×</button>
+    ${r?`<label class="mini reo">Next reorder <input data-f="reorder" type="date" value="${esc(r.due)}" data-orig="${esc(r.due)}"></label>`:""}
+  </div>`;
+}
+function readItems(box){
+  const rows=[...box.querySelectorAll(".item-row")];
+  if(!rows.length) return {err:"Add at least one product."};
+  const out=[];
+  for(const row of rows){
+    const g=f=>row.querySelector(`[data-f="${f}"]`);
+    const supply=intIn(g("supply").value,1,365);
+    if(supply===null) return {err:"Each product needs a supply length of 1 to 365 days."};
+    const reo=g("reorder");
+    if(reo && !isDate(reo.value)) return {err:"Each reorder needs a date."};
+    out.push({id:row.dataset.item||"", protocol:g("protocol").value, product:g("product").value.trim(), supply, recurring:g("recurring").checked, reorder:reo?reo.value:null, reorderOrig:reo?reo.dataset.orig:null});
+  }
+  return {items:out};
+}
+// keep the product suggestions and default supply in step with what's picked
+function rowInput(e){
+  const row=e.target.closest(".item-row"); if(!row) return false;
+  const f=e.target.dataset.f, sup=row.querySelector('[data-f="supply"]'), prod=row.querySelector('[data-f="product"]'), pr=row.querySelector('[data-f="protocol"]');
+  if(f==="supply") sup.dataset.touched="1";
+  if(f==="protocol"){ prod.setAttribute("list","dl-"+pr.value); prod.placeholder="Product, e.g. "+{peptides:"KLOW",hrt:"Estradiol",trt:"Testosterone",mwl:"Semaglutide"}[pr.value]; }
+  if((f==="protocol"||f==="product") && !sup.dataset.touched) sup.value=defaultSupply(pr.value,prod.value);
+  return true;
+}
+function rowRemove(btn){
+  const box=btn.closest(".item-list");
+  if(box.querySelectorAll(".item-row").length<=1){ toast("A client needs at least one product."); return; }
+  btn.closest(".item-row").remove();
+}
+function wireItemBox(box,onChange){
+  box.addEventListener("input",e=>{ if(rowInput(e)) onChange&&onChange(); });
+  box.addEventListener("change",e=>{ if(e.target.dataset.f==="recurring"||e.target.dataset.f==="protocol") onChange&&onChange(); });
+  box.addEventListener("click",e=>{ const b=e.target.closest('[data-act="rmItem"]'); if(b){ rowRemove(b); onChange&&onChange(); } });
+}
+
+/* ---------- edit panel ---------- */
 function editPanel(c){
   return `<div class="edit" data-edit="${esc(c.id)}">
     <div class="row2"><div><label for="eName">Name</label><input id="eName" maxlength="60" value="${esc(c.name)}"></div>
     <div><label for="ePhone">Phone</label><input id="ePhone" type="tel" maxlength="20" value="${esc(c.phone||"")}"></div></div>
-    <div class="row2"><div><label for="eProto">Protocol</label><select id="eProto">${Object.entries(PROTO).map(([v,l])=>`<option value="${v}"${c.protocol===v?" selected":""}>${l}</option>`).join("")}</select></div>
-    <div><label>&nbsp;</label><label class="check" for="eRec" style="padding:7px 10px"><input type="checkbox" id="eRec"${c.recurring?" checked":""}><span>Recurring</span></label></div></div>
+    <h4>What they're on</h4>
+    <div class="item-list" id="eItems">${itemsOf(c).map(it=>itemRow(it,true)).join("")}</div>
+    <button type="button" class="small add-item" data-act="eAddItem">+ Add another product</button>
     <h4>Schedule</h4>
-    <div class="row3"><div><label for="eStart">Start date</label><input id="eStart" type="date" value="${esc(c.start)}"></div>
-      <div><label for="eD1">1st call · days out</label><input id="eD1" type="number" min="1" max="365" inputmode="numeric" value="${esc(c.d1)}"></div>
+    <div class="row2"><div><label for="eStart">Paid date</label><input id="eStart" type="date" value="${esc(c.start)}"></div>
+      <div><label for="eDel">Delivered</label><input id="eDel" type="date" value="${esc(c.delivered||"")}"></div></div>
+    <div class="row2"><div><label for="eD1">1st call · days out</label><input id="eD1" type="number" min="1" max="365" inputmode="numeric" value="${esc(c.d1)}"></div>
       <div><label for="eD2">2nd call · days out</label><input id="eD2" type="number" min="1" max="365" inputmode="numeric" value="${esc(c.d2)}"></div></div>
-    <p class="hint" style="margin:-4px 0 0">Changing these moves any of the first 2 calls that haven't been made yet.</p>
-    <h4>Calls</h4>
-    <div class="edit-dates">${c.calls.map((k,i)=>`<div><label for="eK_${esc(k.id)}">${esc(callLabel(i))} · ${k.doneAt?"called on":"due"}</label><input id="eK_${esc(k.id)}" type="date" data-kd="${esc(k.id)}" value="${esc(k.doneAt||k.due)}"></div>`).join("")}</div>
+    <p class="hint" style="margin:-4px 0 0">The paid date sets the invoice day. The delivered date and call days set the first 2 calls (if they haven't been made yet).</p>
+    ${c.calls.length?`<h4>Calls</h4><div class="edit-dates">${c.calls.map((k,i)=>`<div><label for="eK_${esc(k.id)}">${esc(callLabel(i))} · ${k.doneAt?"called on":"due"}</label><input id="eK_${esc(k.id)}" type="date" data-kd="${esc(k.id)}" value="${esc(k.doneAt||k.due)}"></div>`).join("")}</div>`:""}
     ${c.calls.some(k=>k.doneAt)?`<div><button type="button" class="small" data-act="undo" data-c="${esc(c.id)}">Mark last call as not called</button></div>`:""}
-    ${openReorders(c).length?`<h4>Reorders</h4><div class="edit-dates">${openReorders(c).map(r=>`<div><label for="eR_${esc(r.id)}">Next reorder · due</label><input id="eR_${esc(r.id)}" type="date" data-rd="${esc(r.id)}" value="${esc(r.due)}"></div>`).join("")}</div>`:""}
-    ${c.recurring?`<h4>Billing</h4><p class="hint" style="margin:-6px 0 0">Invoices ${esc(billRule(c))}, based on the start date. To move the billing day, change the start date.</p>`:""}
     <p class="err" id="editErr" hidden></p>
     <div class="actions"><button type="button" class="small primary" data-act="saveEdit" data-c="${esc(c.id)}">Save changes</button><button type="button" class="small ghost" data-act="cancelEdit">Cancel</button></div>
     <div class="danger-row"><span class="hint" style="margin:0">Added by mistake?</span><button type="button" class="small danger" data-act="del" data-c="${esc(c.id)}">Delete ${esc(c.name)}</button></div>
   </div>`;
 }
+function saveEdit(c){
+  const er=$("editErr"), fail=m=>{ er.textContent=m; er.hidden=false; };
+  const name=$("eName").value.trim(), ph=$("ePhone").value.trim();
+  if(!name) return fail("Enter a name.");
+  if(ph && ph.replace(/\D/g,"").length<10) return fail("Enter the full phone number with area code, or leave it blank.");
+  const ri=readItems($("eItems")); if(ri.err) return fail(ri.err);
+  const st=$("eStart").value, dv=$("eDel").value, d1=intIn($("eD1").value,1,365), d2=intIn($("eD2").value,1,365), t0=today();
+  if(!isDate(st)) return fail("Pick the paid date.");
+  if(dv && (!isDate(dv) || dv<st)) return fail("The delivered date can't be before the paid date.");
+  if(dv && dv>t0) return fail("The delivered date can't be in the future.");
+  if(!dv && c.calls.some(k=>k.doneAt)) return fail("Calls have already been made, so the delivered date can't be cleared.");
+  if(d1===null||d2===null||d2<=d1) return fail("Call days must be 1 to 365, and the 2nd call more days out than the 1st.");
+  const kIns=[...document.querySelectorAll('[data-edit] [data-kd]')];
+  if(kIns.some(i=>!isDate(i.value))) return fail("Every call needs a date.");
+  if(kIns.some(i=>{ const k=c.calls.find(x=>x.id===i.dataset.kd); return k && k.doneAt && i.value>t0; })) return fail("A call that was already made can't have a date in the future.");
 
-// reopen a completed call and remove the call (and peptide reorder) it auto-booked
-function undoCall(c,li){
-  const nxt=c.calls[li+1];
-  if(nxt && nxt.auto && !nxt.doneAt){ c.calls.splice(li+1,1); c.reorders=reordersOf(c).filter(r=>r.doneAt || r.callId!==nxt.id); }
-  if(li===1) delete c.notConverted;
-  c.calls[li].doneAt=null;
+  c.name=name; c.phone=ph?fmtPhone(ph):""; c.start=st;
+  // schedule: delivered date + call days move the first 2 calls if they haven't been made
+  const orig=Object.fromEntries(c.calls.map(k=>[k.id,k.doneAt||k.due]));
+  if((dv||null)!==(c.delivered||null) || d1!==c.d1 || d2!==c.d2){
+    c.d1=d1; c.d2=d2; c.delivered=dv||null;
+    if(!c.delivered){ c.calls=[]; itemsOf(c).forEach(it=>{ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }); }
+    else if(!c.calls.length) startCalls(c);
+    else {
+      if(!c.calls[0].doneAt) c.calls[0].due=addDays(c.delivered,d1);
+      if(!c.calls[1].doneAt) c.calls[1].due=addDays(c.delivered,d2);
+    }
+  }
+  // call dates typed in by hand win
+  for(const i of kIns){ const k=c.calls.find(x=>x.id===i.dataset.kd); if(!k || i.value===orig[k.id]) continue;
+    if(k.doneAt){ k.doneAt=i.value; const nx=c.calls[c.calls.indexOf(k)+1]; if(nx && nx.auto && !nx.doneAt && !kIns.some(j=>j.dataset.kd===nx.id && j.value!==orig[nx.id])) nx.due=addDays(i.value,REPEAT); }
+    else k.due=i.value; }
+  // products
+  const keep=new Set(ri.items.map(x=>x.id).filter(Boolean));
+  c.items=itemsOf(c).filter(it=>keep.has(it.id));
+  for(const x of ri.items){
+    let it=c.items.find(i=>i.id===x.id);
+    if(!it){ it=newItem(x); c.items.push(it); if(it.recurring){ startBilling(it,c); it.convertedAt=t0; ensureReorder(c,it); } continue; }
+    const wasRec=it.recurring, oldSupply=it.supply;
+    it.protocol=x.protocol; it.product=x.product; it.supply=x.supply; it.recurring=x.recurring;
+    if(!wasRec && it.recurring){ delete it.notConverted; it.convertedAt=t0; startBilling(it,c); ensureReorder(c,it); }
+    if(wasRec && !it.recurring){ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }
+    const r=openReorder(it);
+    if(r && x.reorder && x.reorder!==x.reorderOrig) r.due=x.reorder;
+    else if(r && oldSupply!==it.supply && isDate(c.delivered)) r.due=firstReorderDate(c,it);
+  }
+  // nothing recurring any more: drop an upcoming recurring call; something recurring after the 2nd call: keep calling
+  const oc=openCall(c);
+  if(!anyRecurring(c) && oc && c.calls.indexOf(oc)>=2) c.calls=c.calls.filter(k=>k!==oc);
+  if(anyRecurring(c) && firstTwoDone(c)) bookNextCall(c);
+  editing=null; save(); render(); toast("Saved");
 }
 
 /* ---------- notes ---------- */
 function fmtWhen(iso){ const d=new Date(iso); return isNaN(d)?"":d.toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); }
 function notesOf(c){ return Array.isArray(c.notes)?c.notes:[]; }
-function lastNote(c){ const n=notesOf(c); if(!n.length) return ""; const x=n[n.length-1]; return `<div class="lastnote"><b>Latest note</b> · ${esc(fmtWhen(x.at))}: ${esc(x.text.length>160?x.text.slice(0,160)+"…":x.text)}</div>`; }
+function addNote(c,text){ if(!Array.isArray(c.notes)) c.notes=[]; c.notes.push({id:uid(),at:new Date().toISOString(),text}); }
 function notesBlock(c){
   const n=notesOf(c);
   const items=n.slice().reverse().map(x=>`<div class="note"><div><time>${esc(fmtWhen(x.at))}</time><p>${esc(x.text)}</p></div><button type="button" class="x" data-act="delNote" data-c="${esc(c.id)}" data-n="${esc(x.id)}" aria-label="Delete this note" title="Delete note">×</button></div>`).join("");
-  return `<details class="notes" data-notes="${esc(c.id)}"${openNotes.has(c.id)?" open":""}><summary>Notes (${n.length})</summary>
+  return `<details class="notes" data-notes="${esc(c.id)}" open><summary>Notes (${n.length})</summary>
     <div class="notes-body">
       ${items}
       <textarea data-draft="${esc(c.id)}" maxlength="1000" rows="2" placeholder="Add a note, e.g. side effects mentioned, best time to call">${esc(noteDrafts[c.id]||"")}</textarea>
@@ -744,165 +874,124 @@ function notesBlock(c){
 }
 
 /* ---------- add form ---------- */
-function proto(){ const r=document.querySelector('input[name="proto"]:checked'); return r?r.value:"peptides"; }
+function formRow(it){ $("fItems").insertAdjacentHTML("beforeend", itemRow(it||{protocol:"peptides",product:"",supply:28,recurring:false},false)); }
 function readForm(){
-  const name=$("fName").value.trim(), phone=$("fPhone").value.trim(), start=$("fStart").value;
+  const name=$("fName").value.trim(), phone=$("fPhone").value.trim(), start=$("fStart").value, del=$("fDel").value;
   const d1=intIn($("fD1").value,1,365), d2=intIn($("fD2").value,1,365);
   if(!name) return {err:"Enter the client's name."};
   if(phone && phone.replace(/\D/g,"").length<10) return {err:"Enter the full phone number with area code, or leave it blank."};
-  if(!isDate(start)) return {err:"Pick a start date."};
+  const ri=readItems($("fItems")); if(ri.err) return ri;
+  if(!isDate(start)) return {err:"Pick the date they paid."};
+  if(del && !isDate(del)) return {err:"Pick a valid delivered date, or leave it blank."};
+  if(del && del<start) return {err:"The delivered date can't be before the paid date."};
   if(d1===null) return {err:"Enter how many days out the 1st call is (1 to 365)."};
   if(d2===null) return {err:"Enter how many days out the 2nd call is (1 to 365)."};
   if(d2<=d1) return {err:"The 2nd call has to be more days out than the 1st."};
-  return {name, phone:phone?fmtPhone(phone):"", start, d1, d2, protocol:proto(), recurring:$("fRec").checked};
+  return {name, phone:phone?fmtPhone(phone):"", start, delivered:del||null, d1, d2, items:ri.items};
 }
 function updatePreview(){
-  const start=$("fStart").value, d1=intIn($("fD1").value,1,365), d2=intIn($("fD2").value,1,365), rep=$("fRec").checked;
-  if(!isDate(start)||d1===null||d2===null||d2<=d1){ $("preview").innerHTML=`<span class="hint" style="margin:0">Pick a start date and two call days to see the schedule.</span>`; return; }
-  $("preview").innerHTML=`<div><b>1st call</b> · <span class="mono">${esc(fmt(addDays(start,d1)))}</span></div>
-    <div><b>2nd call</b> · <span class="mono">${esc(fmt(addDays(start,d2)))}</span></div>
-    <div><b>Then</b> · ${rep?`a call every ${settings.repeat} days after the last one is made`:"you'll be asked if they converted to recurring"}</div>
-    ${rep?(()=>{ const y=addDays(today(),-1), fake={recurring:true,active:true,start,protocol:proto(),billedThrough:start>y?start:y}; const i=invoiceInfo(fake); return `<div><b>Invoice</b> · ${esc(fmt(i.next))}, then ${esc(billRule(fake))}</div>`; })():""}
-    ${rep?`<div><b>Reorder</b> · ${proto()==="peptides"?`with every ${settings.repeat}-day call`:`${esc(fmt(addDays(start,reorderDays(proto()))))}, then every ${reorderDays(proto())} days`}</div>`:""}`;
+  const start=$("fStart").value, del=$("fDel").value, d1=intIn($("fD1").value,1,365), d2=intIn($("fD2").value,1,365);
+  const ri=readItems($("fItems"));
+  if(!isDate(start)||d1===null||d2===null||d2<=d1||ri.err){ $("preview").innerHTML=`<span class="hint" style="margin:0">${esc(ri.err||"Pick the paid date and two call days to see the schedule.")}</span>`; return; }
+  const callAt=n=>isDate(del)?`<span class="mono">${esc(fmt(addDays(del,n)))}</span>`:`${n} days after delivery`;
+  const rec=ri.items.filter(x=>x.recurring), day=ordinal(Number(start.slice(8)));
+  const lines=ri.items.map(x=>{
+    const nm=x.product||PROTO[x.protocol];
+    if(!x.recurring) return `<div><b>${esc(nm)}</b> · one-time (asked after the 2nd call)</div>`;
+    const ro=isDate(del)?`reorder ${esc(fmtS(maxDate(addDays(del,Math.max(x.supply-LEAD,0)),today())))}`:`reorder ${Math.max(x.supply-LEAD,0)} days after delivery`;
+    return `<div><b>${esc(nm)}</b> · ${ro}, then every ${x.supply} days · invoice ${billMonths(x.protocol)===2?"every 2 months":"monthly"} on the ${day}</div>`;
+  }).join("");
+  $("preview").innerHTML=`${isDate(del)?"":`<div><b>Waiting on delivery</b> · shows at the top of Due today</div>`}
+    <div><b>1st call</b> · ${callAt(d1)}</div><div><b>2nd call</b> · ${callAt(d2)}</div>
+    <div><b>Then</b> · ${rec.length?"a call every 21 days after the last one is made":"you'll be asked if they converted to recurring"}</div>${lines}`;
 }
+wireItemBox($("fItems"),updatePreview);
+$("fAddItem").addEventListener("click",()=>{ formRow(); updatePreview(); const r=[...$("fItems").querySelectorAll(".item-row")].pop(); r&&r.querySelector('[data-f="product"]').focus(); });
 $("addForm").addEventListener("submit",e=>{
   e.preventDefault();
   const r=readForm(), er=$("formErr");
   if(r.err){ er.textContent=r.err; er.hidden=false; return; }
   er.hidden=true;
-  const c={id:uid(), ...r, active:true, created:new Date().toISOString(),
-    calls:[{id:uid(),due:addDays(r.start,r.d1),doneAt:null},{id:uid(),due:addDays(r.start,r.d2),doneAt:null}], notes:[]};
-  const firstNote=$("fNote").value.trim(); if(firstNote) c.notes.push({id:uid(),at:new Date().toISOString(),text:firstNote});
-  if(c.recurring) ensureReorder(c,c.start);
-  if(c.recurring){ c.billV=1; const y=addDays(today(),-1); c.billedThrough = c.start>y ? c.start : y; }
+  const c={id:uid(), name:r.name, phone:r.phone, start:r.start, delivered:r.delivered, d1:r.d1, d2:r.d2, active:true, created:new Date().toISOString(), calls:[], notes:[], v:2,
+    items:r.items.map(newItem)};
+  c.items.forEach(it=>{ if(it.recurring) startBilling(it,c); });
+  const firstNote=$("fNote").value.trim(); if(firstNote) addNote(c,firstNote);
+  if(c.delivered) startCalls(c);
   clients.push(c); save(); render();
-  $("fName").value=""; $("fPhone").value=""; $("fNote").value=""; $("fRec").checked=false; $("fStart").value=today(); updatePreview();
-  toast(`${c.name} added. 1st call ${fmtS(c.calls[0].due)}`);
+  $("fName").value=""; $("fPhone").value=""; $("fNote").value=""; $("fStart").value=today(); $("fDel").value=""; $("fItems").innerHTML=""; formRow(); updatePreview();
+  toast(c.delivered ? `${c.name} added. 1st call ${fmtS(c.calls[0].due)}` : `${c.name} added. Waiting on delivery: mark it delivered when it arrives.`);
   $("fName").focus();
 });
-["fStart","fD1","fD2","fRec"].forEach(id=>$(id).addEventListener("input",updatePreview));
-$("fRec").addEventListener("change",updatePreview);
-document.querySelectorAll('input[name="proto"]').forEach(x=>x.addEventListener("change",updatePreview));
-document.querySelectorAll("[data-ro]").forEach(i=>i.addEventListener("change",e=>{
-  const n=intIn(e.target.value,1,365), k=e.target.dataset.ro;
-  if(n===null){ e.target.value=settings.reorder[k]; toast("Enter 1 to 365 days."); return; }
-  settings.reorder[k]=n; save(); render(); updatePreview(); toast(`${PROTO[k]} reorders every ${n} days from the next order on. Already-booked reorders keep their dates.`);
-}));
-$("repDays").addEventListener("change",e=>{
-  const n=intIn(e.target.value,1,365);
-  if(n===null){ e.target.value=settings.repeat; toast("Enter 1 to 365 days."); return; }
-  settings.repeat=n; save(); render(); updatePreview(); toast(`Follow-ups now ${n} days apart. Already-booked calls keep their dates.`);
-});
+["fStart","fDel","fD1","fD2"].forEach(id=>$(id).addEventListener("input",updatePreview));
 
 /* ---------- actions ---------- */
-const find=id=>clients.find(c=>c.id===id);
-let pendingDel=null;
 document.addEventListener("click",e=>{ document.querySelectorAll("details.more[open]").forEach(d=>{ if(!d.contains(e.target) || e.target.closest(".menu button")) d.open=false; }); });
 $("list").addEventListener("click",async e=>{
   const b=e.target.closest("button"); if(!b) return;
   const a=b.dataset.act, c=b.dataset.c?find(b.dataset.c):null;
-  if(a==="copy"){ try{ await navigator.clipboard.writeText(b.dataset.v); toast("Phone copied"); }catch(err){ toast(b.dataset.v); } return; }
+  if(a==="rmItem"){ rowRemove(b); return; }
+  if(a==="eAddItem"){ $("eItems").insertAdjacentHTML("beforeend", itemRow({protocol:"peptides",product:"",supply:28,recurring:false},false)); const r=[...$("eItems").querySelectorAll(".item-row")].pop(); r&&r.querySelector('[data-f="product"]').focus(); return; }
   if(a==="notesToggle" && c){ openNotes.has(c.id)?openNotes.delete(c.id):openNotes.add(c.id); render(); return; }
   if(a==="addNote" && c){
     const text=(noteDrafts[c.id]||"").trim(); if(!text){ toast("Type a note first."); return; }
-    if(!Array.isArray(c.notes)) c.notes=[];
-    c.notes.push({id:uid(),at:new Date().toISOString(),text}); noteDrafts[c.id]=""; openNotes.add(c.id); save(); render(); toast("Note added"); return;
+    addNote(c,text); noteDrafts[c.id]=""; openNotes.add(c.id); save(); render(); toast("Note added"); return;
   }
   if(a==="delNote" && c){ c.notes=notesOf(c).filter(n=>n.id!==b.dataset.n); save(); render(); toast("Note deleted"); return; }
+  if(a==="delOpen" && c){ deliverOpen=c.id; if(tab!=="due"){ tab="due"; setTab(); } else render(); const i=$("delDate"); if(i) i.focus(); return; }
+  if(a==="delCancel"){ deliverOpen=null; render(); return; }
+  if(a==="delSave" && c){
+    const v=$("delDate").value, t0=today();
+    if(!isDate(v) || v<c.start || v>t0){ toast(v>t0?"The delivered date can't be in the future.":"Pick the day it was delivered (on or after the paid date)."); return; }
+    c.delivered=v; startCalls(c); deliverOpen=null; save(); render();
+    toast(`Delivered. 1st call for ${c.name}: ${fmt(c.calls[0].due)}`, "Undo", ()=>{ if(c.calls.some(k=>k.doneAt)) return; c.delivered=null; c.calls=[]; itemsOf(c).forEach(it=>{ it.reorders=(it.reorders||[]).filter(r=>r.doneAt); }); save(); render(); toast("Back to waiting on delivery"); });
+    return;
+  }
   if(a==="done" && c){
     const k=c.calls.find(x=>x.id===b.dataset.k); if(!k||k.doneAt) return;
     k.doneAt=today();
-    const nx=nextAfterDone(c); save(); render();
+    const nx=bookNextCall(c); save(); render();
     const li=c.calls.indexOf(k), undo=()=>{ undoCall(c,li); save(); render(); toast(`${callLabel(li)} moved back to the call list`); };
-    if(needsDecision(c)){ undoTarget={c,li}; openDecision(c); }
+    if(li===1 && needsDecision(c)){ undoTarget={c,li}; openDecision(c); }
     else toast(nx ? `Done. Next call for ${c.name}: ${fmt(nx.due)}` : "Marked as called", "Undo", undo);
   }
-  else if(a==="decide" && c){ openDecision(c); }
-  else if(a==="charged" && c){
-    const i=invoiceInfo(c); if(!i) return;
-    const before=c.billedThrough;
-    if(!Array.isArray(c.charges)) c.charges=[];
-    c.charges.push({date:i.next, at:today()});
-    c.billedThrough=i.next;
-    const nx=invoiceInfo(c).next;
-    save(); render();
-    toast(`Charged. Next invoice for ${c.name}: ${fmt(nx)}`, "Undo", ()=>{ c.charges.pop(); c.billedThrough=before; save(); render(); toast("Moved back to Invoices"); });
-  }
-  else if(a==="ordered" && c){
-    const ro=reordersOf(c).find(x=>x.id===b.dataset.r); if(!ro||ro.doneAt) return;
-    ro.doneAt=today();
-    const nx = c.protocol==="peptides" ? null : ensureReorder(c,ro.doneAt);
-    save(); render();
-    toast(nx?`Ordered. Next reorder for ${c.name}: ${fmt(nx.due)}`:`Ordered for ${c.name}`, "Undo", ()=>{ ro.doneAt=null; if(nx) c.reorders=reordersOf(c).filter(x=>x!==nx); save(); render(); toast("Moved back to To order"); });
-  }
-  else if(a==="roSnooze" && c){ const ro=reordersOf(c).find(x=>x.id===b.dataset.r); if(!ro) return; ro.due=addDays(today(),1); save(); render(); toast(`Moved to ${fmt(ro.due)}`); }
   else if(a==="snooze" && c){ const k=c.calls.find(x=>x.id===b.dataset.k); if(!k) return; k.due=addDays(today(),1); save(); render(); toast(`Moved to ${fmt(k.due)}`); }
-  else if(a==="view" && c){ tab="clients"; search=c.name; $("search").value=c.name; show=sectionOf(c); setTab(); }
-  else if(a==="cameBack" && c){ openDecision(c); $("cvYes").click(); }
-  else if(a==="editWhy" && c){ openDecision(c); $("cvNo").click(); }
+  else if(a==="ordered" && c){
+    const g=reorderGroups(c).find(x=>x.due===b.dataset.g); if(!g) return;
+    const undo=markOrdered(c,g); save(); render();
+    const nx=nextReorderGroup(c);
+    toast(`Ordered ${listJoin(g.items.map(x=>itemName(x.it)))} for ${c.name}.${nx?` Next reorder ${fmtS(nx.due)}.`:""}`, "Undo", ()=>{ undo(); save(); render(); toast("Moved back to To order"); });
+  }
+  else if(a==="roSnooze" && c){ const g=reorderGroups(c).find(x=>x.due===b.dataset.g); if(!g) return; const d=addDays(today(),1); g.items.forEach(x=>x.r.due=d); save(); render(); toast(`Moved to ${fmt(d)}`); }
+  else if(a==="charged" && c){
+    const g=invoiceGroups(c).find(x=>x.date===b.dataset.g); if(!g) return;
+    const before=g.items.map(it=>[it,it.billedThrough]);
+    g.items.forEach(it=>{ if(!Array.isArray(it.charges)) it.charges=[]; it.charges.push({date:g.date,at:today()}); it.billedThrough=g.date; });
+    save(); render(); const nx=nextInvoiceGroup(c);
+    toast(`Charged.${nx?` Next invoice for ${c.name}: ${fmt(nx.date)}`:""}`, "Undo", ()=>{ before.forEach(([it,bt])=>{ it.charges.pop(); it.billedThrough=bt; }); save(); render(); toast("Moved back to Invoices"); });
+  }
+  else if(a==="decide" && c){ undoTarget=null; openDecision(c); }
+  else if(a==="cameBack" && c){ const it=itemsOf(c).find(x=>x.notConverted); undoTarget=null; if(it) openDecision(c,it.id); }
   else if(a==="edit" && c){
     editing=c.id;
     if(tab!=="clients"){ tab="clients"; show=sectionOf(c); search=""; $("search").value=""; setTab(); } else render();
     const ed=document.querySelector(`[data-edit="${CSS.escape(c.id)}"]`); if(ed){ ed.scrollIntoView({block:"start"}); const i=$("eName"); if(i) i.focus({preventScroll:true}); }
   }
   else if(a==="cancelEdit"){ editing=null; render(); }
-  else if(a==="saveEdit" && c){
-    const name=$("eName").value.trim(), ph=$("ePhone").value.trim(), er=$("editErr");
-    if(!name){ er.textContent="Enter a name."; er.hidden=false; return; }
-    if(ph && ph.replace(/\D/g,"").length<10){ er.textContent="Enter the full phone number with area code, or leave it blank."; er.hidden=false; return; }
-    const st=$("eStart").value, d1=intIn($("eD1").value,1,365), d2=intIn($("eD2").value,1,365);
-    if(!isDate(st)){ er.textContent="Pick a start date."; er.hidden=false; return; }
-    if(d1===null||d2===null||d2<=d1){ er.textContent="Call days must be 1 to 365, and the 2nd call more days out than the 1st."; er.hidden=false; return; }
-    const kIns=[...document.querySelectorAll('[data-edit] [data-kd]')], rIns=[...document.querySelectorAll('[data-edit] [data-rd]')];
-    if([...kIns,...rIns].some(i=>!isDate(i.value))){ er.textContent="Every call and reorder needs a date."; er.hidden=false; return; }
-    const t0=today();
-    if(kIns.some(i=>{ const k=c.calls.find(x=>x.id===i.dataset.kd); return k && k.doneAt && i.value>t0; })){ er.textContent="A call that was already made can't have a date in the future."; er.hidden=false; return; }
-    // 1) start date / call days move the first 2 calls if they haven't been made
-    const orig=Object.fromEntries(c.calls.map(k=>[k.id,k.doneAt||k.due]));
-    if(st!==c.start || d1!==c.d1 || d2!==c.d2){
-      c.start=st; c.d1=d1; c.d2=d2;
-      if(c.calls[0] && !c.calls[0].doneAt) c.calls[0].due=addDays(st,d1);
-      if(c.calls[1] && !c.calls[1].doneAt) c.calls[1].due=addDays(st,d2);
-    }
-    // 2) dates typed in by hand win
-    for(const i of kIns){ const k=c.calls.find(x=>x.id===i.dataset.kd); if(!k || i.value===orig[k.id]) continue; if(k.doneAt){
-        k.doneAt=i.value; const nx=c.calls[c.calls.indexOf(k)+1]; // a changed "called on" date moves the auto-booked next call
-        if(nx && nx.auto && !nx.doneAt && !kIns.some(j=>j.dataset.kd===nx.id && j.value!==orig[nx.id])) nx.due=addDays(i.value,settings.repeat);
-      } else k.due=i.value; }
-    // 3) peptide reorders follow the call they go with; typed reorder dates win
-    for(const ro of openReorders(c)){ const k=ro.callId && c.calls.find(x=>x.id===ro.callId); if(k && !k.doneAt) ro.due=k.due; }
-    for(const i of rIns){ const ro=reordersOf(c).find(x=>x.id===i.dataset.rd); if(ro && i.value!==i.defaultValue) ro.due=i.value; }
-
-    const oldProto=c.protocol;
-    c.name=name; c.phone=ph?fmtPhone(ph):""; c.protocol=$("eProto").value;
-    const wasRec=c.recurring; c.recurring=$("eRec").checked;
-    if(wasRec && !c.recurring){ // turning recurring off: drop an open recurring call (keeps the 1st and 2nd calls)
-      const oc=openCall(c); if(oc && c.calls.indexOf(oc)>=2) c.calls=c.calls.filter(x=>x!==oc);
-    }
-    if(c.recurring) delete c.notConverted;
-    if(!wasRec && c.recurring){ nextAfterDone(c); if(!c.convertedAt) c.convertedAt=today(); if(!c.billV){ c.billV=1; const y=addDays(today(),-1); c.billedThrough=c.start>y?c.start:y; } } // turning on after everything was done books the next one
-    if(!c.recurring || oldProto!==c.protocol || wasRec!==c.recurring){
-      c.reorders=reordersOf(c).filter(r=>r.doneAt); // rebuild open reorders for the new setup
-      if(c.recurring){
-        if(c.protocol==="peptides"){ const oc=openCall(c); if(oc && c.calls.indexOf(oc)>=2) addReorder(c,oc.due,oc.id); }
-        else { const r=ensureReorder(c, lastOrdered(c)||today()); if(r && r.due<today()) r.due=today(); }
-      }
-    }
-    editing=null; save(); render(); toast("Saved");
-  }
+  else if(a==="saveEdit" && c){ saveEdit(c); }
   else if(a==="undo" && c){
     let li=-1; c.calls.forEach((k,i)=>{ if(k.doneAt) li=i; });
     if(li<0) return;
     const was=editing; undoCall(c,li); editing=was; save(); render(); toast(`${callLabel(li)} moved back to the call list`);
   }
   else if(a==="stop" && c){ c.active=false; save(); render(); toast(`Calls stopped for ${c.name}`); }
-  else if(a==="resume" && c){ c.active=true; nextAfterDone(c); save(); render(); toast(`Calls resumed for ${c.name}`); }
+  else if(a==="resume" && c){ c.active=true; if(firstTwoDone(c)) bookNextCall(c); recurringItems(c).forEach(it=>ensureReorder(c,it)); save(); render(); toast(`Calls resumed for ${c.name}`); }
+  else if(a==="copy"){ try{ await navigator.clipboard.writeText(b.dataset.v); toast("Phone copied"); }catch(err){ toast(b.dataset.v); } }
   else if(a==="del" && c){
-    pendingDel=c.id; $("cfTitle").textContent=`Delete ${c.name}?`; $("cfBody").textContent="This removes the client and all their calls from this browser. It can't be undone unless you have a backup.";
+    pendingDel=c.id; $("cfTitle").textContent=`Delete ${c.name}?`; $("cfBody").textContent="This removes the client, their calls, reorders and notes. It can't be undone.";
     $("confirmDlg").showModal();
   }
 });
-$("list").addEventListener("input",e=>{ const id=e.target.dataset&&e.target.dataset.draft; if(id) noteDrafts[id]=e.target.value; });
+$("list").addEventListener("input",e=>{ const id=e.target.dataset&&e.target.dataset.draft; if(id) noteDrafts[id]=e.target.value; else if(e.target.closest("#eItems")) rowInput(e); });
 $("list").addEventListener("toggle",e=>{ const id=e.target.dataset&&e.target.dataset.notes; if(!id) return; e.target.open?openNotes.add(id):openNotes.delete(id); },true);
 $("list").addEventListener("keydown",e=>{ if(e.target.dataset&&e.target.dataset.draft && e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); const b=e.target.closest(".notes-body").querySelector('[data-act="addNote"]'); if(b) b.click(); } });
 $("cfNo").addEventListener("click",()=>{ pendingDel=null; $("confirmDlg").close(); });
@@ -913,174 +1002,89 @@ $("search").addEventListener("input",e=>{ search=e.target.value; render(); });
 $("sections").addEventListener("click",e=>{ const b=e.target.closest("[data-sec]"); if(!b) return; show=b.dataset.sec; editing=null; render(); });
 
 /* ---------- import a backup file from the old browser-only version ---------- */
-function backupNudge(){}
 $("restoreBtn").addEventListener("click",()=>$("restoreFile").click());
 $("restoreFile").addEventListener("change",async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
-  if(demo){ toast("Go back to your real list before importing."); return; }
   if(!loadedOnce){ toast("Wait for your list to finish loading, then try again."); return; }
   try{
     const d=JSON.parse(await f.text());
     if(!d || d.app!=="relive-followups" || !Array.isArray(d.clients)) throw 0;
-    const ok=d.clients.filter(c=>c && typeof c.name==="string" && Array.isArray(c.calls) && c.calls.every(k=>isDate(k.due)));
+    const ok=d.clients.filter(c=>c && typeof c.name==="string" && Array.isArray(c.calls) && c.calls.every(k=>isDate(k.due)) && isDate(c.start));
+    ok.forEach(migrate);
     const ids=new Set(clients.map(c=>c.id)); let added=0;
     for(const c of ok){ if(ids.has(c.id)){ clients[clients.findIndex(x=>x.id===c.id)]=c; } else { clients.push(c); added++; } }
-    if(d.settings && intIn(d.settings.repeat,1,365)) settings.repeat=Number(d.settings.repeat);
-    if(d.settings && d.settings.reorder){ for(const k of ["hrt","trt","mwl"]){ const n=intIn(d.settings.reorder[k],1,365); if(n!==null) settings.reorder[k]=n; } upgradeReorderSettings(settings, d.settings.reorderV); }
-    ok.forEach(migrateReorders); ok.forEach(migrateBilling);
-    save(); render(); updatePreview(); toast(`Imported ${ok.length} client${ok.length===1?"":"s"} (${added} new). Saving to your Google Sheet…`);
+    save(); render(); toast(`Imported ${ok.length} client${ok.length===1?"":"s"} (${added} new). Saving to your Google Sheet…`);
   }catch(err){ toast("That file isn't a tracker backup."); }
 });
 
-/* ---------- reminders (while the page is open) ---------- */
-function notifySupported(){ return false; } // the daily summary email replaces browser notifications here
-function updateNotifyBtn(){
-  const b=$("notifyBtn");
-  if(!notifySupported()){ b.hidden=true; return; }
-  if(Notification.permission==="granted"){ b.textContent="Reminders on"; b.disabled=true; }
-  else if(Notification.permission==="denied"){ b.textContent="Reminders blocked"; b.disabled=true; b.title="Allow notifications for this site in your browser settings."; }
-}
-function checkReminders(){
-  if(!notifySupported() || Notification.permission!=="granted") return;
-  const t=today(); if(settings.lastNotified===t) return;
-  if(demo) return;
-  const due=allOpen().filter(x=>x.k.due<=t).length+clients.filter(needsDecision).length, ord=allReorders().filter(x=>x.r.due<=t).length;
-  if(!due && !ord && !allInvoices().some(x=>x.next<=t)) return;
-  const parts=[]; if(due) parts.push(`${due} call${due===1?"":"s"} due`); if(ord) parts.push(`${ord} reorder${ord===1?"":"s"} to place`);
-  const chg=allInvoices().filter(x=>x.next<=t).length; if(chg) parts.push(`${chg} invoice${chg===1?"":"s"} charging`);
-  try{ new Notification("Relive follow-ups", {body:parts.join(" · "), tag:"relive-due"}); settings.lastNotified=t; save(); }catch(e){}
-}
-$("notifyBtn").addEventListener("click",async()=>{
-  if(!notifySupported()) return;
-  try{ await Notification.requestPermission(); }catch(e){}
-  updateNotifyBtn(); settings.lastNotified=""; checkReminders();
-  if(Notification.permission==="granted") toast("Reminders on. You'll get one each day this page is open with calls due.");
-});
-
-/* ---------- converted to recurring? ---------- */
-let decId=null;
-function openDecision(c){
-  decId=c.id;
-  $("cvTitle").textContent=`Did ${c.name} convert to recurring?`;
-  const last=c.calls[c.calls.length-1];
-  $("cvSub").textContent= c.notConverted ? `Marked as didn't convert on ${fmtS(c.notConverted.at)}.` : `Both one-time calls are done (2nd call ${fmtS(last.doneAt)}).`;
+/* ---------- converted to recurring? (asked for each one-time product) ---------- */
+let decId=null, decItem=null, decForced=false;
+function openDecision(c,itemId){
+  const it=itemId ? itemsOf(c).find(x=>x.id===itemId) : pendingItems(c)[0];
+  if(!it){ closeDecision(); return; }
+  decId=c.id; decItem=it.id; decForced=!!itemId;
+  const many=!itemId && pendingItems(c).length>1;
+  $("cvTitle").textContent=`Did ${c.name} convert ${itemName(it)} to recurring?`;
+  $("cvSub").textContent= it.notConverted ? `Marked as didn't convert on ${fmtS(it.notConverted.at)} (${it.notConverted.reason}).` : (many?`${pendingItems(c).length} one-time products to answer, one at a time. `:"")+(c.calls[1]&&c.calls[1].doneAt?`Both calls are done (2nd call ${fmtS(c.calls[1].doneAt)}).`:"");
   $("cvStep1").hidden=false; $("cvStep2").hidden=true; $("cvStep3").hidden=true; $("cvErr").hidden=true; $("cvErr3").hidden=true;
-  $("cvReason").value=(c.notConverted&&c.notConverted.reason)||"Cost"; $("cvWhy").value=(c.notConverted&&c.notConverted.detail)||"";
-  $("cvProto").value=c.protocol; $("cvWhat").value=""; $("cvOrderNow").checked=true; cvHints();
+  $("cvReason").value=(it.notConverted&&it.notConverted.reason)||"Cost"; $("cvWhy").value=(it.notConverted&&it.notConverted.detail)||"";
+  $("cvProto").value=it.protocol; $("cvProd").value=it.product||""; $("cvProd").setAttribute("list","dl-"+it.protocol); $("cvSupply").value=it.supply; delete $("cvSupply").dataset.touched;
+  $("cvWhat").value=""; $("cvOrderNow").checked=true; cvHints();
   $("cvUndo").hidden=!(undoTarget && undoTarget.c===c);
   if(!$("convDlg").open) $("convDlg").showModal();
   $("cvYes").focus();
 }
+function curDec(){ const c=find(decId); const it=c && itemsOf(c).find(x=>x.id===decItem); return c&&it?{c,it}:null; }
 function cvHints(){
-  const c=find(decId); if(!c) return;
-  const p=$("cvProto").value;
-  $("cvSwitch").textContent = p===c.protocol ? `Continuing ${PROTO[p]}. Pick a different protocol if they switched.` : `Switching from ${PROTO[c.protocol]} to ${PROTO[p]}.`;
-  const last=c.calls[c.calls.length-1];
-  const nextDue=addDays(last.doneAt,settings.repeat);
-  $("cvNext").textContent=`Next call: ${fmt(nextDue<today()?today():nextDue)}, then every ${settings.repeat} days. Reorders ${reorderRule(p)}. Invoices on the ${ordinal(Number(c.start.slice(8)))}, ${(p==="hrt"||p==="trt")?"every 2 months":"every month"}.`;
+  const d=curDec(); if(!d) return;
+  const p=$("cvProto").value, prod=$("cvProd").value.trim(), was=itemName(d.it);
+  $("cvSwitch").textContent = (p===d.it.protocol && (prod||"")===(d.it.product||"")) ? `Continuing ${was}. Change the protocol or product if they switched.` : `Switching from ${was} to ${prod||PROTO[p]}.`;
+  const sup=intIn($("cvSupply").value,1,365)||d.it.supply;
+  $("cvNext").textContent=`Reorders every ${sup} days. Invoices ${billMonths(p)===2?"every 2 months":"monthly"} on the ${payDay(d.c)}.`;
 }
-function closeDecision(){ decId=null; undoTarget=null; if($("convDlg").open) $("convDlg").close(); }
-$("cvProto").addEventListener("change",cvHints);
+function closeDecision(){ decId=null; decItem=null; decForced=false; undoTarget=null; if($("convDlg").open) $("convDlg").close(); }
+function afterDecision(c){ save(); render(); if(!decForced && pendingItems(c).length){ undoTarget=null; openDecision(c); } else closeDecision(); }
+$("cvProto").addEventListener("change",()=>{ $("cvProd").setAttribute("list","dl-"+$("cvProto").value); if(!$("cvSupply").dataset.touched) $("cvSupply").value=defaultSupply($("cvProto").value,$("cvProd").value); cvHints(); });
+$("cvProd").addEventListener("input",()=>{ if(!$("cvSupply").dataset.touched) $("cvSupply").value=defaultSupply($("cvProto").value,$("cvProd").value); cvHints(); });
+$("cvSupply").addEventListener("input",()=>{ $("cvSupply").dataset.touched="1"; cvHints(); });
 $("cvWhat").addEventListener("input",()=>{ $("cvErr").hidden=true; });
-$("cvYes").addEventListener("click",()=>{ $("cvStep1").hidden=true; $("cvStep2").hidden=false; $("cvWhat").focus(); });
-$("cvBack").addEventListener("click",()=>{ $("cvStep2").hidden=true; $("cvStep1").hidden=false; $("cvYes").focus(); });
-let undoTarget=null;
-$("cvUndo").addEventListener("click",()=>{ const u=undoTarget; closeDecision(); if(u && clients.includes(u.c)){ undoCall(u.c,u.li); save(); render(); toast(`${callLabel(u.li)} moved back to the call list`); } });
-$("cvLater").addEventListener("click",()=>{ const c=find(decId); closeDecision(); if(c) toast(`${c.name} is waiting in Due today until you answer.`); });
-$("convDlg").addEventListener("cancel",e=>{ e.preventDefault(); $("cvLater").click(); });
-$("cvNo").addEventListener("click",()=>{ $("cvStep1").hidden=true; $("cvStep3").hidden=false; $("cvReason").focus(); });
-$("cvBack3").addEventListener("click",()=>{ $("cvStep3").hidden=true; $("cvStep1").hidden=false; $("cvNo").focus(); });
 $("cvWhy").addEventListener("input",()=>{ $("cvErr3").hidden=true; });
+$("cvYes").addEventListener("click",()=>{ $("cvStep1").hidden=true; $("cvStep2").hidden=false; $("cvWhat").focus(); });
+$("cvNo").addEventListener("click",()=>{ $("cvStep1").hidden=true; $("cvStep3").hidden=false; $("cvReason").focus(); });
+$("cvBack").addEventListener("click",()=>{ $("cvStep2").hidden=true; $("cvStep1").hidden=false; $("cvYes").focus(); });
+$("cvBack3").addEventListener("click",()=>{ $("cvStep3").hidden=true; $("cvStep1").hidden=false; $("cvNo").focus(); });
+$("cvUndo").addEventListener("click",()=>{ const u=undoTarget; closeDecision(); if(u && clients.includes(u.c)){ undoCall(u.c,u.li); save(); render(); toast(`${callLabel(u.li)} moved back to the call list`); } });
+$("cvLater").addEventListener("click",()=>{ const d=curDec(); closeDecision(); if(d) toast(`${d.c.name} is waiting in Due today until you answer.`); });
+$("convDlg").addEventListener("cancel",e=>{ e.preventDefault(); $("cvLater").click(); });
 $("cvStep3").addEventListener("submit",e=>{
   e.preventDefault();
-  const c=find(decId); if(!c){ closeDecision(); return; }
+  const d=curDec(); if(!d){ closeDecision(); return; }
   const reason=$("cvReason").value, detail=$("cvWhy").value.trim();
   if(!detail){ $("cvErr3").textContent="Add a short description of why they didn't convert."; $("cvErr3").hidden=false; $("cvWhy").focus(); return; }
-  const editingReason=!!c.notConverted;
-  c.notConverted={reason, detail, at:(c.notConverted&&c.notConverted.at)||today()};
-  if(!Array.isArray(c.notes)) c.notes=[];
-  c.notes.push({id:uid(),at:new Date().toISOString(),text:`${editingReason?"Updated reason":"Didn't convert"} (${reason}): ${detail}`});
-  closeDecision(); save(); render();
-  toast(editingReason?"Reason updated":`Saved. ${c.name} is in One-time clients under Didn't convert.`);
+  d.it.notConverted={reason, detail, at:(d.it.notConverted&&d.it.notConverted.at)||today()};
+  addNote(d.c,`${itemName(d.it)}: didn't convert (${reason}): ${detail}`);
+  const oc=openCall(d.c); if(!anyRecurring(d.c) && oc && d.c.calls.indexOf(oc)>=2) d.c.calls=d.c.calls.filter(k=>k!==oc);
+  undoTarget=null; toast(`Saved. ${itemName(d.it)} stays one-time.`); afterDecision(d.c);
 });
 $("cvStep2").addEventListener("submit",e=>{
   e.preventDefault();
-  const c=find(decId); if(!c){ closeDecision(); return; }
-  const what=$("cvWhat").value.trim(), p=$("cvProto").value;
+  const d=curDec(); if(!d){ closeDecision(); return; }
+  const what=$("cvWhat").value.trim(), p=$("cvProto").value, prod=$("cvProd").value.trim(), sup=intIn($("cvSupply").value,1,365);
+  if(sup===null){ $("cvErr").textContent="Enter how many days the supply lasts (1 to 365)."; $("cvErr").hidden=false; return; }
   if(!what){ $("cvErr").textContent="Add a few words about what they're doing now."; $("cvErr").hidden=false; $("cvWhat").focus(); return; }
-  const switched=p!==c.protocol;
-  const label = switched ? `Converted to recurring, switched from ${PROTO[c.protocol]} to ${PROTO[p]}` : `Converted to recurring, continuing ${PROTO[p]}`;
-  if(!Array.isArray(c.notes)) c.notes=[];
-  c.notes.push({id:uid(),at:new Date().toISOString(),text:`${label}: ${what}`});
-  c.protocol=p; c.recurring=true; c.convertedAt=today(); delete c.notConverted;
-  c.billV=1; { const y=addDays(today(),-1); c.billedThrough=c.start>y?c.start:y; }
-  const last=c.calls[c.calls.length-1];
-  let due=addDays(last.doneAt,settings.repeat); if(due<today()) due=today();
-  const call={id:uid(),due,doneAt:null,auto:true}; c.calls.push(call);
-  const orderNow=$("cvOrderNow").checked;
-  if(orderNow) addReorder(c,today());
-  if(p==="peptides") addReorder(c,call.due,call.id);
-  else if(!orderNow) ensureReorder(c,today());
-  closeDecision(); save(); render();
-  toast(`${c.name} is now recurring. Next call ${fmt(due)}.${orderNow?" Reorder added to To order.":""}`);
+  const was=itemName(d.it), switched=p!==d.it.protocol || prod!==(d.it.product||"");
+  addNote(d.c, switched?`Converted to recurring, switched from ${was} to ${prod||PROTO[p]}: ${what}`:`Converted ${was} to recurring: ${what}`);
+  Object.assign(d.it,{protocol:p, product:prod, supply:sup, recurring:true, convertedAt:today()}); delete d.it.notConverted;
+  startBilling(d.it,d.c);
+  ensureReorder(d.c,d.it,$("cvOrderNow").checked?today():null);
+  bookNextCall(d.c);
+  undoTarget=null; const nc=openCall(d.c);
+  toast(`${itemName(d.it)} is now recurring.${nc?` Next call ${fmtS(nc.due)}.`:""}`); afterDecision(d.c);
 });
 
-/* ---------- examples (in memory only) ---------- */
-function demoClients(){
-  const t=today(), ago=n=>addDays(t,-n), at=(n,h)=>{ const [y,m,d]=ago(n).split("-").map(Number); return new Date(y,m-1,d,h,15).toISOString(); };
-  const call=(due,done)=>({id:uid(),due,doneAt:done||null});
-  const note=(n,h,text)=>({id:uid(),at:at(n,h),text});
-  const ro=(due,done,callId)=>{ const r={id:uid(),due,doneAt:done||null}; if(callId) r.callId=callId; return r; };
-  return [
-    {id:"ex1",name:"Mike R. (example)",phone:"(616) 555-0142",protocol:"peptides",start:ago(5),d1:5,d2:28,recurring:true,active:true,billV:1,billedThrough:ago(5),
-      calls:[call(t),call(addDays(ago(5),28))],notes:[note(5,10,"Started KLOW. Prefers a text first, then a call after 5pm.")]},
-    {id:"ex2",name:"Sarah T. (example)",phone:"(616) 555-0187",protocol:"hrt",start:ago(30),d1:5,d2:28,recurring:false,active:true,
-      calls:[call(ago(25),ago(25)),call(ago(2))],notes:[note(25,11,"Day 5: patch irritating her skin a little. Told her to rotate sites."),note(2,14,"Left voicemail. Try again Tuesday morning.")]},
-    {id:"ex3",name:"Dan K. (example)",phone:"(616) 555-0163",protocol:"trt",start:ago(60),d1:5,d2:28,recurring:true,active:true,billV:1,billedThrough:ago(1),
-      calls:[call(ago(55),ago(55)),call(ago(32),ago(31)),call(ago(10),ago(10)),call(addDays(ago(10),21))],convertedAt:ago(31),
-      reorders:[ro(ago(31),ago(31)),ro(addDays(ago(31),49))],
-      notes:[note(55,9,"Feeling good, no injection issues."),note(10,12,"Labs due next month. Wants Saturday appointments.")]},
-    {id:"ex4",name:"Lisa M. (example)",phone:"(616) 555-0110",protocol:"mwl",start:ago(2),d1:3,d2:21,recurring:false,active:true,
-      calls:[call(addDays(ago(2),3)),call(addDays(ago(2),21))],notes:[note(2,15,"Semaglutide 0.25. Mild nausea expected, check water and protein intake.")]},
-    {id:"ex5",name:"Amy B. (example)",phone:"(616) 555-0128",protocol:"mwl",start:ago(49),d1:5,d2:28,recurring:true,active:true,billV:1,
-      billedThrough:addMonthsAnchor(ago(49),1,Number(ago(49).slice(8))),charges:[{date:addMonthsAnchor(ago(49),1,Number(ago(49).slice(8))),at:addMonthsAnchor(ago(49),1,Number(ago(49).slice(8)))}],
-      calls:[call(ago(44),ago(44)),call(ago(21),ago(21)),call(t)],convertedAt:ago(21),reorders:[ro(ago(21),ago(21)),ro(t)],notes:[note(21,13,"Down 11 lbs. Asked about moving up a dose.")]},
-    (()=>{ const k=[call(ago(65),ago(65)),call(ago(42),ago(42)),call(ago(21),ago(21)),call(t)];
-      return {id:"ex8",name:"Kate L. (example)",phone:"(616) 555-0151",protocol:"peptides",start:ago(70),d1:5,d2:28,recurring:true,active:true,convertedAt:ago(42),
-        calls:k,billV:1,billedThrough:ago(1),reorders:[ro(ago(42),ago(42)),ro(ago(21),ago(21),k[2].id),ro(t,null,k[3].id)],notes:[note(21,12,"On Wolverine stack. Knee feels much better.")]}; })(),
-    {id:"ex9",name:"Rob S. (example)",phone:"(616) 555-0134",protocol:"hrt",start:ago(90),d1:5,d2:28,recurring:true,active:true,convertedAt:ago(62),billV:1,billedThrough:ago(1),
-      calls:[call(ago(85),ago(85)),call(ago(62),ago(62)),call(ago(41),ago(41)),call(ago(20),ago(20)),call(addDays(ago(20),21))],
-      reorders:[ro(ago(51),ago(51)),ro(ago(2))],notes:[note(20,15,"Energy and sleep better. Due for labs at next visit.")]},
-    {id:"ex6",name:"Chris P. (example)",phone:"(616) 555-0199",protocol:"peptides",start:ago(40),d1:5,d2:28,recurring:true,active:false,
-      calls:[call(ago(35),ago(35)),call(ago(12),ago(12)),call(addDays(ago(12),21))],notes:[note(12,16,"Pausing because of cost. Open to restarting in January.")]},
-    {id:"ex7",name:"Jen W. (example)",phone:"(616) 555-0175",protocol:"trt",start:ago(31),d1:5,d2:28,recurring:false,active:true,
-      calls:[call(ago(26),ago(26)),call(ago(3),ago(3))],notes:[note(3,11,"2nd call: likes how she feels, thinking about staying on. Waiting to check with her husband.")]},
-    {id:"ex10",name:"Tom H. (example)",phone:"(616) 555-0119",protocol:"peptides",start:ago(45),d1:5,d2:28,recurring:false,active:true,
-      calls:[call(ago(40),ago(40)),call(ago(17),ago(16))],notConverted:{reason:"Cost",detail:"Said $300 a month is too much right now. Wants to revisit after tax season.",at:ago(16)},
-      notes:[note(16,10,"Didn't convert (Cost): Said $300 a month is too much right now. Wants to revisit after tax season.")]},
-    {id:"ex11",name:"Nina P. (example)",phone:"(616) 555-0146",protocol:"mwl",start:ago(38),d1:5,d2:28,recurring:false,active:true,
-      calls:[call(ago(33),ago(33)),call(ago(10),ago(9))],notConverted:{reason:"Side effects",detail:"Nausea never settled down even after the dose stayed the same. Prefers to stop.",at:ago(9)},
-      notes:[note(9,14,"Didn't convert (Side effects): Nausea never settled down even after the dose stayed the same. Prefers to stop.")]},
-    {id:"ex12",name:"Greg V. (example)",phone:"(616) 555-0158",protocol:"trt",start:ago(33),d1:5,d2:28,recurring:false,active:true,
-      calls:[call(ago(28),ago(28)),call(ago(5),ago(5))],notConverted:{reason:"Cost",detail:"Insurance won't cover it. Going to compare prices and call back.",at:ago(5)},notes:[]}
-  ];
-}
-function setDemo(on){
-  if(on===demo) return;
-  demo=on; editing=null;
-  if(on){ realClients=clients; clients=demoClients(); tab="due"; }
-  else { clients=realClients; refresh(); }
-  $("demoBar").hidden=!on;
-  setTab(); window.scrollTo({top:0});
-}
-
-
-
 /* ---------- start ---------- */
-$("fStart").value=today();
-updatePreview(); updateNotifyBtn(); render();
-load().then(()=>{ if(!demo){ render(); updatePreview(); } });
-if(AUTO_DEMO) setDemo(true);
+$("fStart").value=today(); formRow(); updatePreview(); render();
+load().then(()=>{ render(); });
 setInterval(()=>{ if($("todayLbl").textContent!=="Today: "+fmt(today())) render(); refresh(); },60000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ render(); refresh(); } });
 window.addEventListener("beforeunload",e=>{ if(inFlight||hasChanges()){ e.preventDefault(); e.returnValue=""; } });

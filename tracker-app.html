@@ -384,7 +384,7 @@ function pendingItems(c){ return itemsOf(c).filter(it=>!it.recurring && !it.notC
 function protocolsOf(c){ return [...new Set(itemsOf(c).map(it=>it.protocol))]; }
 function chipsFor(c){ return protocolsOf(c).map(chip).join(""); }
 function chip(p){ return `<span class="chip ${esc(p)}">${esc(PROTO[p]||p)}</span>`; }
-function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,12)||defaultSupply(o.protocol), recurring:!!o.recurring, reorders:[], charges:[], roV:4, runV:1}; }
+function newItem(o){ return {id:uid(), protocol:o.protocol||"peptides", product:(o.product||"").trim(), supply:intIn(o.supply,1,12)||defaultSupply(o.protocol), recurring:!!o.recurring, reorders:[], charges:[], roV:4, runV:2}; }
 
 /* ---------- reorders: on the paid day, same as the invoice ---------- */
 function openReorder(it){ return (it.reorders||[]).find(r=>!r.doneAt)||null; }
@@ -457,16 +457,17 @@ function nextInvoiceGroup(c){ return invoiceGroups(c)[0]||null; }
 function payDay(c){ return ordinal(Number(c.start.slice(8))); }
 
 /* ---------- heads-up: 3 days before each invoice (recurring) or the day a one-time product runs out ---------- */
-// one-time: the day they'd be charged if they were recurring (paid day + 1 month, or 2 for HRT/TRT). Only once per product.
-function runOutDate(c,it){ const m=it.supply||defaultSupply(it.protocol), day=Number(c.start.slice(8)), from=maxDate(it.startedAt||c.start,c.start); let k=1, d=addMonthsAnchor(c.start,m,day); while(d<=from && k<1200){ k++; d=addMonthsAnchor(c.start,m*k,day); } return d; }
+// one-time: a 30-day supply (60 for HRT/TRT) starting the day it was delivered, so the last day is delivered + 29 (or + 59)
+function runOutDate(c,it){ if(!isDate(c.delivered)) return ""; const from=maxDate(it.startedAt||c.delivered, c.delivered); return addDays(from, 30*(it.supply||defaultSupply(it.protocol))-1); }
 function runOutItems(c){ return pendingItems(c).filter(it=>!it.runOutCalled); }
-// existing one-time products whose run-out date already passed don't start out overdue
-function runOutInit(c,it){ if(it.runV) return; it.runV=1; if(!it.recurring && isDate(c.start) && runOutDate(c,it)<today()) it.runOutCalled="before"; }
+// every one-time product gets the alert, including ones that already ran out (shown red: no supply for N days)
+function runOutInit(c,it){ if(it.runV===2) return; it.runV=2; if(it.runOutCalled==="before") delete it.runOutCalled; }
+function noSupplyDays(c,it,t){ const d=runOutDate(c,it); if(it.recurring || !d) return 0; const n=diff(t,d); return n>0?n:0; }
 function payAlert(c,byDate){
   if(!c.active || !isDate(c.start)) return null;
   const g=nextInvoiceGroup(c);
   if(g && diff(g.date,byDate)<=HEADS_UP) return {kind:"invoice", date:g.date, names:g.items.map(itemName)};
-  const ro=runOutItems(c).map(it=>({it,d:runOutDate(c,it)})).sort((a,b)=>a.d.localeCompare(b.d));
+  const ro=runOutItems(c).map(it=>({it,d:runOutDate(c,it)})).filter(x=>x.d).sort((a,b)=>a.d.localeCompare(b.d));
   if(ro.length && diff(ro[0].d,byDate)<=HEADS_UP){ const its=ro.filter(x=>diff(x.d,ro[0].d)<=LEAD).map(x=>x.it); return {kind:"runout", date:ro[0].d, items:its, names:its.map(itemName)}; }
   return null;
 }
@@ -713,13 +714,13 @@ function payBar(c,byDate,t){
   const a=payAlert(c,byDate); if(!a) return "";
   const late=a.date<t;
   if(a.kind==="invoice") return `<div class="pay-line${late?" late":""}"><b>${late?"Missed invoice":"Invoice coming up"}</b><span>Charge + order ${esc(listJoin(a.names))} · ${esc(whenText(a.date,t))}</span><button type="button" class="small" data-act="payDone" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Charged &amp; ordered</button></div>`;
-  return `<div class="pay-line${late?" late":""}"><b>${late?"Ran out":"Running out"}</b><span>${esc(listJoin(a.names))} · ${esc(whenText(a.date,t))} · call about going recurring</span><button type="button" class="small" data-act="runCalled" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Called</button></div>`;
+  return `<div class="pay-line${late?" late":""}"><b>${late?"Ran out":"Running out"}</b><span>${esc(listJoin(a.names))} · ${late?`no supply for ${diff(t,a.date)} day${diff(t,a.date)===1?"":"s"} (out since ${esc(fmtS(a.date))})`:esc(whenText(a.date,t))} · call about going recurring</span><button type="button" class="small" data-act="runCalled" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Called</button></div>`;
 }
 function payCard(c,t){
   const a=payAlert(c,t), late=a.date<t, n=diff(a.date,t), inv=a.kind==="invoice";
   const chipH=n>0?`<span class="chip soon">In ${n} day${n===1?"":"s"} · ${esc(fmtS(a.date))}</span>`:dueChip(a.date,t);
   return `<article class="card slim${late?" isLate":""}">
-    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">${inv?(late?"Missed invoice":"Invoice coming up"):(late?"Ran out · one-time":"Running out · one-time")}</span></div>${chipH}</div>
+    <div class="card-head"><div class="who"><strong>${esc(c.name)}</strong>${chipsFor(c)}<span class="sub-label">${inv?(late?"Missed invoice":"Invoice coming up"):(late?"Ran out · one-time":"Running out · one-time")}</span></div>${!inv&&late?`<span class="chip late">No supply · ${n<0?-n:0} day${n===-1?"":"s"}</span>`:chipH}</div>
     <div class="phone-row">${phoneLink(c)}<span class="inv-hint">${inv?`Charge + order <b>${esc(listJoin(a.names))}</b>`:`<b>${esc(listJoin(a.names))}</b> · call to see if they want to go recurring`}</span></div>
     <div class="actions">
       ${inv?`<button type="button" class="small primary" data-act="payDone" data-c="${esc(c.id)}" data-g="${esc(a.date)}">Charged &amp; ordered</button>`
@@ -825,7 +826,8 @@ function clientCard(c,t){
     if(it.recurring){ bits.push("Recurring"); if(r) bits.push(`reorder ${fmtS(r.due)}`); if(inv) bits.push(`invoice ${fmtS(inv)}`); }
     else if(it.notConverted) bits.push(`Didn't convert: ${it.notConverted.reason}${it.notConverted.detail?` · ${it.notConverted.detail}`:""}`);
     else bits.push("One-time");
-    return `<div class="it">${chip(it.protocol)}<b>${esc(it.product||PROTO[it.protocol])}</b><span class="hint">${esc(bits.join(" · "))}</span></div>`;
+    const ns=noSupplyDays(c,it,t);
+    return `<div class="it">${chip(it.protocol)}<b>${esc(it.product||PROTO[it.protocol])}</b><span class="hint">${esc(bits.join(" · "))}</span>${ns?`<span class="chip late">No supply · ${ns} day${ns===1?"":"s"} (out since ${esc(fmtS(runOutDate(c,it)))})</span>`:""}</div>`;
   }).join("");
   return `<article class="card${st==="stopped"?" stopped":""}">
     <div class="card-head">

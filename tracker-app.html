@@ -173,8 +173,7 @@ details.notes[open] summary::before{content:"\25BE  "}
       <p class="sub">Add a client once. Their calls show up here on the right day. <span class="mono" id="todayLbl"></span></p>
     </div>
     <div class="head-tools">
-      <button id="demoBtn" type="button">See examples</button>
-      <span class="sync" id="syncStatus" data-state="busy">Loading…</span>
+            <span class="sync" id="syncStatus" data-state="busy">Loading…</span>
       <button id="notifyBtn" type="button" hidden>Turn on reminders</button>
       <button id="restoreBtn" type="button" title="Bring in clients from a backup file made with the old version">Import backup</button>
       <input id="restoreFile" type="file" accept="application/json,.json" hidden>
@@ -1042,11 +1041,11 @@ function setDemo(on){
   demo=on; editing=null;
   if(on){ realClients=clients; clients=demoClients(); tab="due"; }
   else { clients=realClients; refresh(); }
-  $("demoBar").hidden=!on; $("demoBtn").hidden=on;
+  $("demoBar").hidden=!on;
   setTab(); window.scrollTo({top:0});
 }
-$("demoBtn").addEventListener("click",()=>setDemo(true));
-$("demoExit").addEventListener("click",()=>setDemo(false));
+
+
 
 /* ---------- start ---------- */
 $("fStart").value=today();

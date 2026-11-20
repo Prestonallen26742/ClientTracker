@@ -1006,8 +1006,11 @@ $("list").addEventListener("click",async e=>{
     else toast(nx ? `Done. Next call for ${c.name}: ${fmt(nx.due)}` : "Marked as called", "Undo", undo);
   }
   else if(a==="labsDone" && c){
-    const l=openLabs(c); if(!l) return; l.doneAt=today(); save(); render();
-    toast(`Bloodwork marked done for ${c.name}`, "Undo", ()=>{ l.doneAt=null; save(); render(); toast("Moved back to the list"); });
+    const l=openLabs(c); if(!l) return; l.doneAt=today();
+    const prods=listJoin(hormoneItems(c).map(itemName));
+    addNote(c,`6-week bloodwork done${prods?` (${prods})`:""}.`); const note=c.notes[c.notes.length-1];
+    openNotes.add(c.id); save(); render();
+    toast(`Bloodwork done for ${c.name}. Saved to notes, so you can add results there.`, "Undo", ()=>{ l.doneAt=null; c.notes=notesOf(c).filter(n=>n!==note); save(); render(); toast("Moved back to the list"); });
   }
   else if(a==="labsSnooze" && c){ const l=openLabs(c); if(!l) return; l.due=addDays(today(),1); save(); render(); toast(`Moved to ${fmt(l.due)}`); }
   else if(a==="snooze" && c){ const k=c.calls.find(x=>x.id===b.dataset.k); if(!k) return; k.due=addDays(today(),1); save(); render(); toast(`Moved to ${fmt(k.due)}`); }
